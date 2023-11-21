@@ -4,19 +4,21 @@ import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import 'package:jwt_decode/jwt_decode.dart';
+import 'package:monitoring_project/home_page.dart';
 import 'package:monitoring_project/main.dart';
 import 'dart:convert';
 import '../widget/dialogs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:get_mac/get_mac.dart';
+// import 'package:get_mac/get_mac.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+// import 'package:flutter/foundation.dart';
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:async';
 import 'package:android_id/android_id.dart';
+import 'package:geolocator/geolocator.dart';
+// import 'package:';
+
 
 class Login extends StatefulWidget {
 
@@ -29,12 +31,74 @@ class Login extends StatefulWidget {
 
 class _LoginState extends State<Login> {
 
+  @override
+  void initState() {
+    super.initState();
+    // initPlatformState();
+    _initAndroidId();
+    getUserCurrentLocation();
+    _getId();
+  }
+
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   var  txtEditEmail = TextEditingController();
   var  txtEditPwd = TextEditingController();
   String token = "";
   String nama = "";
   String kode_kantor = "";
+  String nama_kantor = "";
+  double lat_kantor = 0;
+  double long_kantor = 0;
+  double radius = 0;
+  String ket_bidang = "";
+  String deviceId= "";
+
+  Future<Position> getUserCurrentLocation() async {
+
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    permission = await Geolocator.checkPermission();
+
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        _fetchDialogWarning(context, "Mohon izikan akses lokasi untuk menggunakan aplikasi ini");
+        return Future.error('Location permissions are denied');
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      // Permissions are denied forever, handle appropriately.
+      permission = await Geolocator.requestPermission();
+      _fetchDialogWarning(context, "Mohon izikan akses lokasi untuk menggunakan aplikasi ini");
+      return Future.error('Location permissions are permanently denied, we cannot request permissions.');
+    }
+
+    return await Geolocator.getCurrentPosition();
+  }
+
+  void _fetchDialogWarning(BuildContext context, String message, [bool mounted = true]) async {
+    // show the loading dialog
+    showDialog(
+      // The user CANNOT close this dialog  by pressing outsite it
+      barrierDismissible: false,
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: const Text('Gagal!',style: TextStyle(color: Colors.black),),
+        content: Text(message),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => SystemNavigator.pop(),
+            child: const Text('OK',style: TextStyle(color: Colors.black)),
+          ),
+        ],
+      ),
+    );
+  }
+
 
   void fireToast(String message) {
     Fluttertoast.showToast(
@@ -70,37 +134,6 @@ class _LoginState extends State<Login> {
 
   static final DeviceInfoPlugin deviceInfoPlugin = DeviceInfoPlugin();
   Map<String, dynamic> _deviceData = <String, dynamic>{};
-
-  @override
-  void initState() {
-    super.initState();
-    initPlatformState();
-    _initAndroidId();
-  }
-
-  Future<void> initPlatformState() async {
-    var deviceData = <String, dynamic>{};
-
-    try {
-
-        if (Platform.isAndroid) {
-          deviceData =
-              _readAndroidBuildData(await deviceInfoPlugin.androidInfo);
-        } else if (Platform.isIOS) {
-          deviceData = _readIosDeviceInfo(await deviceInfoPlugin.iosInfo);
-        }
-    } on PlatformException {
-      deviceData = <String, dynamic>{
-        'Error:': 'Failed to get platform version.'
-      };
-    }
-
-    if (!mounted) return;
-
-    setState(() {
-      _deviceData = deviceData;
-    });
-  }
 
   Map<String, dynamic> _readAndroidBuildData(AndroidDeviceInfo build) {
     return <String, dynamic>{
@@ -139,7 +172,6 @@ class _LoginState extends State<Login> {
       'displayXDpi': build.displayMetrics.xDpi,
       'displayYDpi': build.displayMetrics.yDpi,
     };
-
   }
 
   Map<String, dynamic> _readIosDeviceInfo(IosDeviceInfo data) {
@@ -161,39 +193,17 @@ class _LoginState extends State<Login> {
 
   String _deviceMAC = 'Click the button.';
 
-  Future<void> initMacAddress() async {
-    String macAddress;
-    
-    try {
-    macAddress = await GetMac.macAddress;
-    } on PlatformException {
-    macAddress = 'Error getting the MAC address.';
-    }
-    
-    setState(() {
-    _deviceMAC = macAddress;
-    });
-
-    print("maccccccc" + _deviceMAC + macAddress);
-  }
-
   static const _androidIdPlugin = AndroidId();
   var _androidId = 'Unknown';
 
-  // Platform messages are asynchronous, so we initialize in an async method.
   Future<void> _initAndroidId() async {
     String androidId;
-    // Platform messages may fail, so we use a try/catch PlatformException.
-    // We also handle the message potentially returning null.
     try {
       androidId = await _androidIdPlugin.getId() ?? 'Unknown ID';
     } on PlatformException {
       androidId = 'Failed to get Android ID.';
     }
 
-    // If the widget was removed from the tree while the asynchronous platform
-    // message was in flight, we want to discard the reply rather than calling
-    // setState to update our non-existent appearance.
     if (!mounted) return;
 
     setState(() => _androidId = androidId);
@@ -201,71 +211,94 @@ class _LoginState extends State<Login> {
     print("android id : "+androidId);
   }
 
-  // Future<String?> _getId() async {
-  //   var deviceInfo = DeviceInfoPlugin();
-  //   if (Platform.isIOS) { // import 'dart:io'
-  //     var iosDeviceInfo = await deviceInfo.iosInfo;
-  //     return iosDeviceInfo.identifierForVendor; // unique ID on iOS
-  //   } else if(Platform.isAndroid) {
-  //     var androidDeviceInfo = await deviceInfo.androidInfo;
-  //     return androidDeviceInfo.androidId; // unique ID on Android
-  //   }
-  // }
-  
+  Future<String?> _getId() async {
+
+    var deviceInfo = DeviceInfoPlugin();
+
+    if (Platform.isIOS) {
+
+      var iosDeviceInfo = await deviceInfo.iosInfo;
+      _androidId = iosDeviceInfo.identifierForVendor!;
+
+      return iosDeviceInfo.identifierForVendor; // unique ID on iOS
+
+    } else if(Platform.isAndroid) {
+
+      const _androidIdPlugin = AndroidId();
+      final String? androidId = await _androidIdPlugin.getId();
+      _androidId = _androidId;
+
+      return androidId;
+    }
+  }
+
   Future<void> doLogin(npp, password) async {
+
+    // var deviceiId = _getId();
 
     final GlobalKey<State> _keyLoader = GlobalKey<State>();
     Dialogs.loading(context, _keyLoader, "Proses...");
 
-    const _androidIdPlugin = AndroidId();
-    final String? androidId = await _androidIdPlugin.getId();
-
-    print(androidId);
-    // _deviceData.keys.map(
-    //         (String property){
-    //           return print(
-    //             'test-----------------' +
-    //             '${_deviceData[property]}',
-    //           );
-    //         }
+    // // ==> Perubahan
+    // const _androidIdPlugin = AndroidId();
+    // final String? androidId = await _androidIdPlugin.getId();
+    // // <===
+    //
+    // print(
+    //     Platform.isAndroid
+    //         ? 'Android Device Info'
+    //         : Platform.isIOS
+    //         ? 'iOS Device Info'
+    //         : ''
     // );
-
-    // print("Device id" + _deviceData['id']);
-    // print("Device brand" + _deviceData['brand']);
-    // print("Device codename" + _deviceData['version.codename']);
-    // print("Device device" + _deviceData['build.device']);
-
-    print(
-        Platform.isAndroid
-            ? 'Android Device Info'
-            : Platform.isIOS
-            ? 'iOS Device Info'
-            : ''
-    );
 
     try {
 
+      //FETCH LOGIN
       final response = await http.post(
-          Uri.parse("http://192.168.100.16/mobile-auth-api/public/api/login"),
+
+          Uri.parse("https://rsk.mcndev.my.id/api/login"),
           headers: {'Content-Type': 'application/json; charset=UTF-8'},
           body: jsonEncode({
             "npp": npp,
             "password": password,
-            "mac": _androidId
-          }));
+            "device_id": _androidId
+          })
+      ).timeout( const Duration(seconds: 10));
 
       final output = jsonDecode(response.body);
 
-      print(response.body.toString());
+      //FETCH KODE KANTOR
+      if (output['rcode'] == "00") {
 
+        final getResult = await http.post(
 
-      if (response.statusCode == 200) {
+            Uri.parse("https://rsk.mcndev.my.id/api/kantor"),
+            headers: <String, String> {
+              'Content-Type': 'application/json; charset=UTF-8',
+            },
+            body: jsonEncode(<String, String>{
+              'kode_kantor': output['kode_kantor'],
+              "npp": npp
+            })
+
+        ).timeout( const Duration(seconds: 10));
+
+        final output2 = jsonDecode(getResult.body);
+        print(output2['ket_bidang']);
+        print(output2['radius']);
 
         if(output['rcode'] == '00') {
 
           token = output['access_token'];
-          nama = output['user']['nama'];
+          nama = output['nama'];
           kode_kantor = output['kode_kantor'];
+          nama_kantor = output['nama_kantor'];
+          lat_kantor = double.parse(output2['latitude']) ;
+          long_kantor = double.parse(output2['longitude']);
+          radius = double.parse(output2['radius']);
+          deviceId = _androidId;
+          // ket_bidang = output['ket_bidang'];
 
           Navigator.of(_keyLoader.currentContext!, rootNavigator: false).pop();
 
@@ -273,37 +306,25 @@ class _LoginState extends State<Login> {
             saveSession(npp);
           }
 
-        }else{
+        } else {
 
           Navigator.of(_keyLoader.currentContext!, rootNavigator: false).pop();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text(
-                  output['message'].toString(),
-                  style: const TextStyle(fontSize: 16),
-                )
-            ),
-          );
+          Dialogs.popUp(context, output["message"].toString());
         }
-      }
 
-      else {
+      }else {
 
-        Navigator.of(_keyLoader.currentContext!, rootNavigator: false).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                output['message'].toString(),
-                style: const TextStyle(fontSize: 16),
-              )
-          ),
-        );
+          Navigator.of(_keyLoader.currentContext!, rootNavigator: false).pop();
+          Dialogs.popUp(context, output["message"].toString());
       }
-    } catch (e) {
-      Navigator.of(_keyLoader.currentContext!, rootNavigator: false).pop();
-      Dialogs.popUp(context, '$e');
     }
-  }
+
+    on TimeoutException catch (e) {
+
+      Navigator.of(_keyLoader.currentContext!, rootNavigator: false).pop();
+      Dialogs.popUp(context, 'Timeout' );
+
+    }}
 
   saveSession(String npp) async {
 
@@ -316,17 +337,20 @@ class _LoginState extends State<Login> {
     pref.setString("nama", nama);
     pref.setString("token", token);
     pref.setString("kode_kantor", kode_kantor);
+    pref.setString("nama_kantor", nama_kantor);
     pref.setString("expired", expiryDate.toString());
     pref.setBool("is_login", true);
+    pref.setDouble("lat_kantor", lat_kantor);
+    pref.setDouble("long_kantor", long_kantor);
+    pref.setDouble("radius", radius);
+    pref.setString("ket_bidang", ket_bidang);
+    pref.setString("device_id", _androidId);
 
-    Navigator.pushAndRemoveUntil(
+    Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (BuildContext context) => MyMain(),
-      ),
-          (route) => false,
+          builder: (context) => MyMain()),
     );
-
   }
 
   @override
@@ -334,21 +358,11 @@ class _LoginState extends State<Login> {
 
     return Scaffold(
         resizeToAvoidBottomInset: false,
+
         body: Container(
             height: MediaQuery.of(context).size.height,
             width: MediaQuery.of(context).size.width,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Colors.green.shade700,
-                  Colors.green,
-                  Colors.green.shade400,
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.centerRight,
-              ),
-            ),
-
+            color: Colors.white,
             child: Form(
                 key: _formKey,
                 child: Column(
@@ -360,17 +374,28 @@ class _LoginState extends State<Login> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.end,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: const [
-                            // Icon(Icons.confirmation_num_sharp),
-                            // Text('Authentication Manajemen', style: TextStyle(color: Colors.white, fontSize: 27.5)),
-                            // Image.asset("assets/images/Logo_Bank_Aceh_Syariah.png"),
-                            Image(image: AssetImage("assets/images/Logo_Bank_Aceh_Syariah.png"),height: 40),
-                            SizedBox(height: 20.5),
+                          children:  [
+                            Image(image: AssetImage("assets/images/Logo_Bank_Aceh_Syariah.png"),height: 50),
+                            SizedBox(height: 21.5),
                             /// LOGIN TEXT
-                            Text('Absensi Online', style: TextStyle(color: Colors.white, fontSize: 19.5),textAlign: TextAlign.center,),
-                            SizedBox(height: 5.5),
+                            Center(
+                              child:                   RichText(
+                                text: TextSpan(
+                                  // text: 'Hello ',
+                                  style: TextStyle(fontSize: 19),
+                                  children: <TextSpan>[
+                                    TextSpan(text: 'ABSENSI ', style: TextStyle(fontWeight: FontWeight.bold,color: Color.fromRGBO(1, 101, 65, 1))),
+                                    // TextSpan(text: 'MOBILE',style: TextStyle(fontWeight: FontWeight.bold,color:Color.fromRGBO(245, 216, 0, 1))),
+                                    TextSpan(text: 'MOBILE',style: TextStyle(fontWeight: FontWeight.bold,color:Color.fromRGBO(1, 101, 65, 1))),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            // Text('PRESENCE', style: TextStyle(color: Color.fromRGBO(1, 101, 65, 1), fontSize: 18,fontWeight: FontWeight.bold),textAlign: TextAlign.center,),
+                            // Text('MOBILE', style: TextStyle(color: Color.fromRGBO(1, 101, 65, 1), fontSize: 18,fontWeight: FontWeight.bold),textAlign: TextAlign.center,),
+                            // SizedBox(height: 10),
                             /// WELCOME
-                            Text('Silahkan Login', style: TextStyle(color: Colors.white, fontSize: 15),textAlign: TextAlign.center),
+                            // Text('SIGN IN', style: TextStyle(color: Color.fromRGBO(1, 101, 65, 1), fontSize: 17, fontWeight: FontWeight.w500),textAlign: TextAlign.center),
                           ],
                         ),
                       ),
@@ -379,10 +404,11 @@ class _LoginState extends State<Login> {
                         child: Container(
                           width: MediaQuery.of(context).size.width,
                           decoration: const BoxDecoration(
-                            color: Colors.white,
+                            // color: Colors.white,
+                            color: Color.fromRGBO(1, 101, 65, 1),
                             borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(50),
-                              topRight: Radius.circular(50),
+                              topLeft: Radius.circular(58),
+                              topRight: Radius.circular(58),
                             ),
                           ),
                           child: SingleChildScrollView(
@@ -399,10 +425,11 @@ class _LoginState extends State<Login> {
                                       borderRadius: BorderRadius.circular(10),
                                       boxShadow: [
                                         BoxShadow(
-                                            color: Colors.grey.withOpacity(0.4),
-                                            blurRadius: 20,
-                                            spreadRadius: 10,
-                                            offset: const Offset(0, 10)
+                                            color: Colors.black87.withOpacity(0.4),
+                                            // color: Colors.white,
+                                            blurRadius: 7,
+                                            // spreadRadius: 1,
+                                            offset: const Offset(0, 0)
                                         ),
                                       ]
                                   ),
@@ -415,7 +442,7 @@ class _LoginState extends State<Login> {
                                             decoration: InputDecoration (
                                               contentPadding: EdgeInsets.symmetric(horizontal: 10),
                                               border: InputBorder.none,
-                                              hintText: 'NPP',
+                                              hintText: 'NRK',
                                               isCollapsed: false,
                                               hintStyle: TextStyle(fontSize: 14, color: Colors.grey),
                                             ),
@@ -425,7 +452,7 @@ class _LoginState extends State<Login> {
                                             },
                                             validator: (String? arg) {
                                               if (arg == null || arg.isEmpty) {
-                                                return 'NPP harus diisi';
+                                                return 'NRK tidak boleh kosong!';
                                               } else {
                                                 return null;
                                               }
@@ -451,60 +478,13 @@ class _LoginState extends State<Login> {
                                             autocorrect: false,
                                             validator: (String? arg) {
                                               if (arg == null || arg.isEmpty) {
-                                                return 'Password harus diisi';
+                                                return 'Password tidak boleh kosong!';
                                               } else {
                                                 return null;
                                               }
                                             },
                                           ),
                                       )
-                                      /// NPP
-                                      // TextFormField(
-                                      //     style: TextStyle(fontSize: 1),
-                                      //     decoration: InputDecoration (
-                                      //       contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                                      //       border: InputBorder.none,
-                                      //       hintText: 'NPP',
-                                      //       isCollapsed: false,
-                                      //       hintStyle: TextStyle(fontSize: 14, color: Colors.grey),
-                                      //     ),
-                                      //     controller: txtEditEmail,
-                                      //     onSaved: (String? val) {
-                                      //       txtEditEmail.text = val!;
-                                      //     },
-                                      //     validator: (String? arg) {
-                                      //       if (arg == null || arg.isEmpty) {
-                                      //         return 'NPP harus diisi';
-                                      //       } else {
-                                      //         return null;
-                                      //       }
-                                      //     },
-                                      // ),
-                                      // Divider(color: Colors.black54, height: 1),
-                                      // /// PASSWORD
-                                      // TextFormField(
-                                      //     decoration: InputDecoration(
-                                      //       contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                                      //       border: InputBorder.none,
-                                      //       hintText: 'Password',
-                                      //       isCollapsed: false,
-                                      //       hintStyle: TextStyle(fontSize: 14, color: Colors.grey),
-                                      //     ),
-                                      //     controller: txtEditPwd,
-                                      //     onSaved: (String? val) {
-                                      //       txtEditPwd.text = val!;
-                                      //     },
-                                      //     obscureText: true,
-                                      //     enableSuggestions: false,
-                                      //     autocorrect: false,
-                                      //     validator: (String? arg) {
-                                      //     if (arg == null || arg.isEmpty) {
-                                      //       return 'Password harus diisi';
-                                      //     } else {
-                                      //       return null;
-                                      //     }
-                                      //   },
-                                      // ),
                                     ],
                                   ),
                                 ),
@@ -513,16 +493,20 @@ class _LoginState extends State<Login> {
                                 MaterialButton(
                                   onPressed: () => {
                                     _validateInputs(),
-                                    initMacAddress(),
+                                    // initMacAddress(),
                                   } ,
                                   height: 45,
-                                  minWidth: 240,
+                                  minWidth: 250,
                                   child: const Text('Login', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),),
-                                  textColor: Colors.white,
-                                  color: Colors.green.shade700,
+                                  textColor: Color.fromRGBO(1, 101, 65, 1),
+                                  color: Colors.white,
                                   shape: const StadiumBorder(),
                                 ),
-                                const SizedBox(height: 25),
+                                const SizedBox(height: 50),
+                                Text(
+                                  "version 1.0",
+                                  style: TextStyle(color: Colors.white,fontSize: 13),
+                                )
                               ],
                             ),
                           ),
@@ -532,5 +516,5 @@ class _LoginState extends State<Login> {
               )
           )
       );
-   }
+  }
 }

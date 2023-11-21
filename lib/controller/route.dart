@@ -15,9 +15,9 @@ class Route extends StatelessWidget {
       // onGenerateRoute: ,
       routes: {
         // When navigating to the "/" route, build the FirstScreen widget.
-        '/': (context) => const HomePage(),
+        '/': (context) => HomePage(),
         // When navigating to the "/second" route, build the SecondScreen widget.
-        '/daftaratm': (context) => const MyApp()
+        // '/daftaratm': (context) => const Presence()
       },
     );
   }

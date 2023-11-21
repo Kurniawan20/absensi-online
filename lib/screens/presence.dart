@@ -1,109 +1,148 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'package:device_info/device_info.dart';
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
-import 'package:fluttertoast/fluttertoast.dart';
+import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import './login.dart';
+import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platform_interface.dart';
+import 'package:quickalert/quickalert.dart';
+import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
 
-void main() => runApp(const MyApp());
+void main() => runApp(const Presence());
 
-class MyApp extends StatefulWidget {
-  const MyApp({Key? key}) : super(key: key);
+class Presence extends StatefulWidget {
+  const Presence({Key? key}) : super(key: key);
 
   @override
-  _MyAppState createState() => _MyAppState();
+  _PresenceState createState() => _PresenceState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _PresenceState extends State<Presence> {
+
+  bool _isMockLocation = false;
+  bool? _jailbroken;
+  bool? _developerMode;
 
   SharedPreferences? preferences;
   Timer? timer;
+  double latKantor = 0;
+  double longKantor = 0;
+  double radius = 0;
+  double zoomVar = 17;
+
+  double latKantor2 = 5.543605637891148;
+  double longKantor2 = 95.32992029020498;
+  static LatLng _initialPosition = LatLng(5.543605637891148, 95.32992029020498);
+
+  bool isJailBroken = false;
+  bool canMockLocation = false;
+  bool isRealDevice = true;
+  bool isOnExternalStorage = false;
+  bool isSafeDevice = false;
+  bool isDevelopmentModeEnable = false;
+  LatLng currentLatLng = LatLng(5.543605637891148, 95.32992029020498) ;
 
   void initState(){
-    // timer = Timer.periodic(Duration(seconds: 5), (Timer t) => _checkRadius(5.543633011017073, 95.3121756820617));
+    super.initState();
+    // initPlatformState();
+
+    getUserCurrentLocation();
+    initializePreference().then((result) {
+      setState(() {
+      });
+    });
+
+    Geolocator.getCurrentPosition().then((currLocation){
+      setState((){
+        currentLatLng = new LatLng(currLocation.latitude, currLocation.longitude);
+      });
+    });
+
+    print(currentLatLng);
+  }
+
+  Future<void> initializePreference() async {
+    this.preferences = await SharedPreferences.getInstance();
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+
+    latKantor = prefs.getDouble("lat_kantor")!;
+    longKantor = prefs.getDouble("long_kantor")!;
+    radius = prefs.getDouble("radius")!;
+
+    latKantor2 = prefs.getDouble("lat_kantor")!;
+    longKantor2 = prefs.getDouble("long_kantor")!;
+
+    setState(() {
+    });
   }
 
   Completer<GoogleMapController> _controller = Completer();
-// on below line we have specified camera position
-  static final CameraPosition _kGoogle = const CameraPosition(
-    target: LatLng(5.543577914626673, 95.31220741678517),
-    zoom: 17.4746,
-  );
-
-  final List<Marker> _markers = <Marker>[
-    Marker(
-        markerId: MarkerId('1'),
-        position: LatLng(20.42796133580664, 75.885749655962),
-        infoWindow: InfoWindow(  
-          title: 'My Position',
-        )
-    ),
-  ];
 
   Future<Position> getUserCurrentLocation() async {
 
-    await Geolocator.requestPermission().then((value){
-    }).onError((error, stackTrace) async {
-    await Geolocator.requestPermission();
-    print("ERROR"+error.toString());
-    });
-    
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      return Future.error('Location services are disabled.');
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        _fetchDialogWarning(context, "Mohon izikan akses lokasi untuk melakukan absensi");
+        return Future.error('Location permissions are denied');
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      // Permissions are denied forever, handle appropriately.
+      _fetchDialogWarning(context, "Mohon izikan akses lokasi untuk melakukan absensi");
+      return Future.error('Location permissions are permanently denied, we cannot request permissions.');
+    }
+
     return await Geolocator.getCurrentPosition();
   }
 
   late GoogleMapController mapController;
   GeolocatorPlatform _geo = new PresenceGeo( );
   bool _inRadius = true;
-  final LatLng _center = const LatLng(5.543633011017073, 95.3121756820617);
-  Map<MarkerId, Marker> markers = <MarkerId, Marker>{};
+
+
 
   void _checkRadius() async {
 
-    getUserCurrentLocation().then((value) async {
+      getUserCurrentLocation().then((value) async {
+
       final double distance = _geo.distanceBetween(
-        5.543633011017073, 95.3121756820617,
+        latKantor, longKantor,
         value.latitude,
         value.longitude,
       );
 
-      print(distance);
-
       setState(() {
-        this._inRadius = distance < 50;
+        this._inRadius = distance < radius;
       });
 
       _absen(value.latitude, value.longitude);
     });
-
-    print(this._inRadius);
-
-  }
-
-  Future<void> _onMapCreated(GoogleMapController controller) async {
-    setState(() {
-        final marker = Marker(
-          markerId: MarkerId("123"),
-          position: LatLng(5.543577914626673, 95.31220741678517),
-          infoWindow: InfoWindow(
-            title: "Pusdiklat PT. Bank Aceh",
-            snippet: "G8V6+CVF, Jl. Patimura, Sukaramai, Kec. Baiturrahman, Kota Banda Aceh, Aceh 23116",
-          ),
-        );
-        // _markers = marker;
-        markers[MarkerId('place_name')] = marker;
-      // }
-    });
   }
 
   Set<Circle> circles = Set.from([Circle(
-    circleId: CircleId("2343"),
-    center: LatLng(5.543577914626673, 95.31220741678517),
-    radius: 50,
-    fillColor: Colors.orange.shade100.withOpacity(0.5),
-    strokeColor:  Colors.orange.shade100.withOpacity(0.1)
+      circleId: CircleId("2343"),
+      center: LatLng(5.543577914626673, 95.31220741678517),
+      radius: 100,
+      fillColor: Colors.orange.shade100.withOpacity(0.5),
+      strokeColor:  Colors.orange.shade100.withOpacity(0.1)
   )]);
 
   final ButtonStyle raisedButtonStyle = ElevatedButton.styleFrom(
@@ -117,214 +156,401 @@ class _MyAppState extends State<MyApp> {
     ),
   );
 
+  void _fetchData(BuildContext context, [bool mounted = true]) async {
+    QuickAlert.show(
+      barrierDismissible: false,
+      context: context,
+      type: QuickAlertType.loading,
+      title: 'Loading',
+      text:  'Sedang memproses absensi..',
+    );
+  }
+
+  void _fetchDialog(BuildContext context, String message, [bool mounted = true]) async {
+    // show the loading dialog
+    showDialog(
+      // The user CANNOT close this dialog  by pressing outsite it
+        barrierDismissible: false,
+        context: context,
+        builder: (BuildContext context) => AlertDialog(
+          backgroundColor: Colors.white,
+            title: const Text('Berhasil',style: TextStyle(color: Colors.black87),),
+            content: Text(message),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.pop(context, 'OK'),
+                child: const Text('OK',style: TextStyle(color: Colors.black87)),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _fetchDialogWarning(BuildContext context, String message, [bool mounted = true]) async {
+    // show the loading dialog
+    showDialog(
+      // The user CANNOT close this dialog  by pressing outsite it
+      barrierDismissible: false,
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        backgroundColor: Colors.yellow,
+        title: const Text('Gagal!',style: TextStyle(color: Colors.black),),
+        content: Text(message),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'OK'),
+            child: const Text('OK',style: TextStyle(color: Colors.black)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<String> _absen(double lat, double long) async {
 
     final prefs = await SharedPreferences.getInstance();
     final branch_id = prefs.getString("kode_kantor").toString();
     final nrk = prefs.getString("npp");
-    final nrk2 = jsonDecode(nrk!);
-    String nrk3 = nrk2.toString();
+    final _deviceId = prefs.getString("device_id");
 
-    print(this._inRadius);
+    bool jailbroken;
+    bool developerMode;
+    AndroidDeviceInfo androidInfo = await DeviceInfoPlugin().androidInfo;
 
-    DateTime dtNow = DateTime.now();
-    DateTime dtAbsen = DateTime.parse("2023-01-09 06:45:00");
-    DateTime dtAbsenPulang = DateTime.parse("2023-01-11 04:00:00");
+    try {
+      jailbroken = await FlutterJailbreakDetection.jailbroken;
+      developerMode = await FlutterJailbreakDetection.developerMode;
+    } on PlatformException {
+      jailbroken = true;
+      developerMode = true;
+    }
 
-    if(this._inRadius) {
+    _jailbroken = jailbroken;
+    _developerMode = developerMode;
+    print("DEVELOPER MODE ${_developerMode}");
+    print("JAILBREAK MODE ${_jailbroken}");
 
-      // getUserCurrentLocation().then((value) async {
+    if(_developerMode == true) {
+      var message = "Mohon matikan developer mode anda!";
 
-        final getResult = await http.post(
-            Uri.parse("http://192.168.100.16/mobile-auth-api/public/api/simpanabsen"),
-            headers: <String, String> {
-              'Content-Type': 'application/json; charset=UTF-8',
-            },
-            body: jsonEncode(<String, String>{
-              'npp': nrk3,
-              // 'latitude' : value.latitude.toString(),
-              'latitude' : lat.toString(),
-              'longitude' : long.toString(),
-              'device_info': '00:1b:63:84:45:e6',
-              'branch_id': branch_id
-            })
-        );
+      Navigator.of(context,rootNavigator: true).pop(context);
 
-        // print(value.latitude.toString() + " " + value.longitude.toString());
-
-        String result = getResult.body.toString().replaceAll('""',"");
-
-        print(result);
-
-        if(jsonDecode(result)['rcode'] == "00") {
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                jsonDecode(result)['message'],
-                style: const TextStyle(fontSize: 16),
-              ),
-              backgroundColor: Colors.greenAccent,
-            ),
-          );
-
-        }else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                jsonDecode(result)['message'],
-                style: const TextStyle(fontSize: 16),
-              ),
-              backgroundColor: Colors.redAccent,
-            ),
-          );
-        }
-      // });
-
-    }else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            " Ditolak, Anda berada di luar area absensi",
-            style: const TextStyle(fontSize: 16),
-          ),
-          backgroundColor: Colors.redAccent,
-        ),
+      QuickAlert.show(
+        context: context,
+        type: QuickAlertType.warning,
+        title: "Warning",
+        text: message,
+        confirmBtnColor : Color.fromRGBO(1, 101, 65, 1),
+        confirmBtnText: 'Oke',
       );
+
+      return "absen gagal";
+
+    }else if(!androidInfo.isPhysicalDevice == false) {
+
+      var message = "Anda terdeteksi menggunakan emulator!";
+
+      Navigator.of(context,rootNavigator: true).pop(context);
+
+      QuickAlert.show(
+        context: context,
+        type: QuickAlertType.warning,
+        title: "Warning",
+        text: message,
+        confirmBtnColor : Color.fromRGBO(1, 101, 65, 1),
+        confirmBtnText: 'Oke',
+      );
+
+      return "absen gagal";
+    }
+
+    try {
+
+      final getResult = await http.post(
+          Uri.parse("https://rsk.mcndev.my.id/api/checksession"),
+          headers: <String, String>{
+            'Content-Type': 'application/json; charset=UTF-8',
+          },
+          body: jsonEncode(<String, String>{
+            'npp': nrk.toString(),
+            "deviceId": _deviceId.toString(),
+          })
+      ).timeout(const Duration(seconds: 20));
+
+      final result = getResult.body.toString().replaceAll('""', "");
+
+      if (jsonDecode(result)['rcode'] == "00") {
+
+        if (this._inRadius) {
+          try {
+            final getResult = await http.post(
+                Uri.parse("https://rsk.mcndev.my.id/api/simpanabsen"),
+                headers: <String, String> {
+                  'Content-Type': 'application/json; charset=UTF-8',
+                },
+                body: jsonEncode(<String, String> {
+                  'npp': nrk.toString(),
+                  'latitude': lat.toString(),
+                  'longitude': long.toString(),
+                  'device_info': '00:1b:63:84:45:e6',
+                  'branch_id': branch_id
+                })
+            ).timeout(const Duration(seconds: 20));
+
+            String result = getResult.body.toString().replaceAll('""', "");
+
+            if (jsonDecode(result)['rcode'] == "00") {
+
+              String message = jsonDecode(result)['message'];
+              Navigator.of(context,rootNavigator: true).pop(context);
+              QuickAlert.show(
+                headerBackgroundColor:Colors.black,
+                context: context,
+                type: QuickAlertType.success,
+                title: "Berhasil",
+                text: message,
+                confirmBtnText: 'Oke',
+                confirmBtnColor: Color.fromRGBO(1, 101, 65, 1),
+              );
+            } else if (jsonDecode(result)['rcode'] == "02") {
+
+              String message = jsonDecode(result)['message'];
+              Navigator.of(context,rootNavigator: true).pop(context);
+
+              QuickAlert.show(
+                headerBackgroundColor:Colors.black,
+                context: context,
+                type: QuickAlertType.info,
+                title: "Info",
+                text: message,
+                confirmBtnText: 'Oke',
+                confirmBtnColor: Color.fromRGBO(1, 101, 65, 1),
+              );
+            }
+          } on TimeoutException catch (_) {
+
+            Navigator.of(context,rootNavigator: true).pop(context);
+            _fetchDialog(context, "Timeout");
+
+          } catch (e) {
+
+            Navigator.of(context,rootNavigator: true).pop(context);
+            _fetchDialog(context, "Timeout");
+
+          }
+        }
+
+      }else {
+        signOut();
+      }
+    } on TimeoutException catch (_) {
+      Navigator.of(context, rootNavigator: true).pop(context);
+      _fetchDialog(context, "Timeout");
+    } catch (e) {
+      Navigator.of(context, rootNavigator: true).pop(context);
+      _fetchDialog(context, "Timeout" + e.toString());
     }
 
     return "nrk";
   }
 
+  signOut() async {
+
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    prefs.clear();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Navigator.pushReplacement(
+          context, MaterialPageRoute(builder: (context) => Login())
+      );
+    });
+  }
+
+  String googleApikey = "GOOGLE_MAP_API_KEY";
+  LatLng startLocation = LatLng(27.6602292, 85.308027);
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
+
+    return Scaffold (
         appBar: AppBar(
-          title: const Text('Absensi'),
-          backgroundColor: Colors.green[700],
+            title: Text(
+                'Presence',
+                      style: TextStyle(fontSize: 18,fontWeight: FontWeight.w500),
+            ),
+            actions: [
+              Padding(
+                padding: EdgeInsets.fromLTRB(6, 0, 6, 0),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton(
+                    icon: Icon(FluentIcons.options_20_filled,color: Colors.white,size: 25,),
+                    items: <DropdownMenuItem>[
+                      DropdownMenuItem(
+                        onTap: signOut,
+                        value: 'logout',
+                        child: Text('Logout'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                      });
+                    },
+                  ),
+                ),
+              ),
+          ],
+          backgroundColor: Color.fromRGBO(1, 101, 65, 1),
         ),
+      // body: Scaffold(
         body:
         Stack(
           children: [
             Container (
               child: SafeArea(
-                // on below line creating google maps
-                child: GoogleMap(
-                  // on below line setting camera position
-                  initialCameraPosition: _kGoogle,
-                  // on below line we are setting markers on the map
-                  markers: Set<Marker>.of(_markers),
-                  circles: circles,
-                  // on below line specifying map type.
+                child: currentLatLng == null ? Center(child:CircularProgressIndicator()) : GoogleMap(
+                  circles: Set.from([
+                    Circle(
+                      circleId: CircleId("2343"),
+                      center: LatLng(latKantor,longKantor),
+                      radius: radius,
+                      fillColor: Colors.orange.shade100.withOpacity(0.5),
+                      strokeColor:  Colors.orange.shade100.withOpacity(0.1)
+                    )
+                  ]),
                   mapType: MapType.normal,
-                  // on below line setting user location enabled.
                   myLocationEnabled: true,
-                  // on below line setting compass enabled.
                   compassEnabled: true,
-                  // on below line specifying controller on map complete.
-                  onMapCreated: (GoogleMapController controller){
+                  initialCameraPosition: CameraPosition(target:  LatLng(5.521358096586348, 95.33064137456458), zoom: 10),
+                  onMapCreated: (GoogleMapController controller) {
                     _controller.complete(controller);
                   },
                 ),
               ),
             ),
-
-            // Container(
-            //   height: 320,
-            //   child:  GoogleMap(
-            //     mapType: MapType.normal,
-            //     myLocationEnabled: true,
-            //     myLocationButtonEnabled: true,
-            //     onMapCreated: _onMapCreated,
-            //     initialCameraPosition: CameraPosition(
-            //       target: _center,
-            //       zoom: 17,
-            //     ),
-            //     markers: markers.values.toSet(),
-            //     circles: circles,
-            //   ),
-            // ),
-
             Align(
               alignment: Alignment.bottomCenter,
               child: Container(
                   margin: const EdgeInsets.only(left: 0.0, right: 0.0),
                   height: 240,
+                  decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(50),
+                  boxShadow: [
+                  BoxShadow(
+                  color: Colors.black87.withOpacity(0.2),
+                  // color: Colors.white,
+                  blurRadius: 4,
+                  // spreadRadius: 1,
+                  offset: const Offset(0, 0)
+                  ),
+                  ]
+                  ),
                   child: Card(
                     margin: EdgeInsets.zero,
                     color: Colors.orangeAccent[600],
                     elevation: 20,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.only(topLeft:Radius.circular(50),topRight: Radius.circular(50))
+                        borderRadius: BorderRadius.only(topLeft:Radius.circular(40),topRight: Radius.circular(40))
                     ),
                     clipBehavior: Clip.hardEdge,
                     child: Padding(
                       padding: EdgeInsets.all(0.0),
                       child:
-                      // InkWell(
-                      //   splashColor: Colors.blue.withAlpha(30),
-                      //   onTap: () {
-                      //     debugPrint('Card tapped.');
-                      //   },
-                      //   child:
                         SizedBox(
                           height: 100,
                           width: double.infinity,
-                          child: 
+                          child:
                           Padding(
                             padding: EdgeInsets.all(20),
-                            child:  Column(
+                            child:
+                            Column(
                               children: [
-                                Text(
-                                  'Silahkan Melakukan Absensi',
+                                Text( 'Silahkan Melakukan Absensi',
                                   textAlign: TextAlign.center,
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                                 ),
                                 SizedBox(
                                   width: 10,
                                   height: 15,
                                 ),
+                                
+                                StreamBuilder(
+                                    builder: (context,snapshot) {
+                                      return  Text(
+                                        DateFormat('kk:mm:ss').format(DateTime.now()), textAlign: TextAlign.center,
+                                        style: TextStyle(fontSize: 14,fontWeight: FontWeight.w600),
+                                      );
+                                    },
+                                    stream: Stream.periodic(const Duration(seconds: 1)),
+                                ),
+
+                                SizedBox(
+                                  width: 10,
+                                  height: 4,
+                                ),
                                 Text(
-                                  DateFormat('kk:mm:ss \n EEE d MMM').format(DateTime.now()), textAlign: TextAlign.center,
+                                  DateFormat('EEEE dd MMMM','id').format(DateTime.now()), textAlign: TextAlign.center,
                                 ),
                                 SizedBox(
                                   width: 10,
                                   height: 30,
                                 ),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                    children: [
-                                      ElevatedButton(
-                                          onPressed: () {
-                                            _checkRadius();
-                                            // _absen();
-                                          } ,
-                                          child: Text("Absen"),
-                                          style:
-                                          // raisedButtonStyle
-                                          ElevatedButton.styleFrom(
-                                            onPrimary: Colors.white,
-                                            primary: Colors.blueAccent,
-                                            minimumSize: Size(120, 40),
-                                          ),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    ElevatedButton(
+                                      onPressed: () {
+                                        // _checkLogin();
+                                        _checkRadius();
+                                        _fetchData(context);
+                                      } ,
+                                      child: Text("Absensi",style: TextStyle(color: Color.fromRGBO(1, 101, 65, 1),fontWeight: FontWeight.w500),),
+                                      style:
+                                      // raisedButtonStyle
+                                      ElevatedButton.styleFrom(
+                                        onPrimary: Colors.white,
+                                        primary: Colors.white,
+                                        // side: const BorderSide(color: Color.fromRGBO(1, 101, 65, 1),width: 1.9),
+                                        side: const BorderSide(color: Color.fromRGBO(1, 101, 65, 1),width: 1.9),
+                                        minimumSize: Size(100, 40),
                                       ),
-                                      // SizedBox(
-                                      //   width: 20,
-                                      // ),
-                                      // ElevatedButton(
-                                      //     onPressed: (){},
-                                      //     child: Text("Pulang"),
-                                      //
-                                      //     style: ElevatedButton.styleFrom(
-                                      //         onPrimary: Colors.white,
-                                      //         primary: Colors.orangeAccent[400],
-                                      //         minimumSize: Size(100, 40),
-                                      //     ),
-                                      // )
-                                    ],
-                                  ),
+                                    ),
+                                    SizedBox(
+                                      width: 10,
+                                      height: 15,
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () async {
+                                        getUserCurrentLocation().then((value) async {
+                                          print(value.latitude.toString() +"  "+value.longitude.toString());
+
+                                          // specified current users location
+                                          CameraPosition cameraPosition = new CameraPosition(
+                                            // target: LatLng(latKantor, longKantor),
+                                            target: LatLng(latKantor, longKantor),
+                                            zoom: 17,
+                                          );
+
+                                          final GoogleMapController controller = await _controller.future;
+                                          controller.animateCamera(CameraUpdate.newCameraPosition(cameraPosition));
+                                          setState(() {
+                                          });
+                                        });
+                                      },
+                                      // child: Icon(Icons.location_city_sharp),
+                                      child: Text("Lokasi Kantor"),
+                                      style:
+                                      // raisedButtonStyle
+                                      ElevatedButton.styleFrom(
+                                        onPrimary: Colors.white,
+                                        primary: Color.fromRGBO(1, 101, 65, 1),
+                                        // primary: Color.fromRGBO(245, 216, 0, 1),
+                                        minimumSize: Size(50, 40),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ],
                             )
                           ),
@@ -335,37 +561,6 @@ class _MyAppState extends State<MyApp> {
             )
           ],
         ),
-          floatingActionButton: FloatingActionButton(
-          onPressed: () async{
-    getUserCurrentLocation().then((value) async {
-    print(value.latitude.toString() +" "+value.longitude.toString());
-
-    // marker added for current users location
-    _markers.add(
-    Marker(
-    markerId: MarkerId("2"),
-    position: LatLng(value.latitude, value.longitude),
-    infoWindow: InfoWindow(
-    title: 'My Current Location',
-    ),
-    )
-    );
-
-    // specified current users location
-    CameraPosition cameraPosition = new CameraPosition(
-    target: LatLng(value.latitude, value.longitude),
-    zoom: 14,
-    );
-
-    final GoogleMapController controller = await _controller.future;
-    controller.animateCamera(CameraUpdate.newCameraPosition(cameraPosition));
-    setState(() {
-    });
-    });
-    },
-      child: Icon(Icons.my_location),
-    ),
-      ),
     );
   }
 }

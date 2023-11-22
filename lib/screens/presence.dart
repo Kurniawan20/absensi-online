@@ -285,6 +285,7 @@ class _PresenceState extends State<Presence> {
         confirmBtnColor : Color.fromRGBO(1, 101, 65, 1),
         confirmBtnText: 'Oke',
       );
+
       return "absen gagal";
     }
 
@@ -335,6 +336,7 @@ class _PresenceState extends State<Presence> {
                 confirmBtnText: 'Oke',
                 confirmBtnColor: Color.fromRGBO(1, 101, 65, 1),
               );
+
             } else if (jsonDecode(result)['rcode'] == "02") {
 
               String message = jsonDecode(result)['message'];
@@ -359,8 +361,23 @@ class _PresenceState extends State<Presence> {
 
             Navigator.of(context,rootNavigator: true).pop(context);
             _fetchDialog(context, "Timeout");
-
           }
+        }else {
+
+          var message = "Anda berada diluar lokasi absen!";
+
+          Navigator.of(context,rootNavigator: true).pop(context);
+
+          QuickAlert.show(
+            context: context,
+            type: QuickAlertType.warning,
+            title: "Warning",
+            text: message,
+            confirmBtnColor : Color.fromRGBO(1, 101, 65, 1),
+            confirmBtnText: 'Oke',
+          );
+
+          return "absen gagal";
         }
 
       }else {

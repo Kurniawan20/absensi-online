@@ -215,7 +215,32 @@ class _PresenceState extends State<Presence> {
 
     bool jailbroken;
     bool developerMode;
-    AndroidDeviceInfo androidInfo = await DeviceInfoPlugin().androidInfo;
+
+      // if (Platform.isAndroid) {
+      //
+      //   AndroidDeviceInfo deviceInfo = await DeviceInfoPlugin().androidInfo;
+      //
+      // } else {
+      //
+      //   IosDeviceInfo deviceInfo = await DeviceInfoPlugin().iosInfo;
+      //
+      // }
+
+    var deviceInfo = DeviceInfoPlugin();
+    bool isPhysicalDevice = false;
+
+    if (Platform.isIOS) {
+
+      var iosDeviceInfo = await deviceInfo.iosInfo;
+      isPhysicalDevice = iosDeviceInfo.isPhysicalDevice!;
+
+    } else if(Platform.isAndroid) {
+
+      var androidDeviceInfo = await deviceInfo.androidInfo;
+      isPhysicalDevice = androidDeviceInfo.isPhysicalDevice!;
+
+    }
+
 
     try {
       jailbroken = await FlutterJailbreakDetection.jailbroken;
@@ -246,7 +271,7 @@ class _PresenceState extends State<Presence> {
 
       return "absen gagal";
 
-    }else if(!androidInfo.isPhysicalDevice == false) {
+    }else if(!isPhysicalDevice == false) {
 
       var message = "Anda terdeteksi menggunakan emulator!";
 
@@ -260,12 +285,10 @@ class _PresenceState extends State<Presence> {
         confirmBtnColor : Color.fromRGBO(1, 101, 65, 1),
         confirmBtnText: 'Oke',
       );
-
       return "absen gagal";
     }
 
     try {
-
       final getResult = await http.post(
           Uri.parse("https://rsk.mcndev.my.id/api/checksession"),
           headers: <String, String>{
@@ -292,7 +315,7 @@ class _PresenceState extends State<Presence> {
                   'npp': nrk.toString(),
                   'latitude': lat.toString(),
                   'longitude': long.toString(),
-                  'device_info': '00:1b:63:84:45:e6',
+                  // 'device_info': '00:1b:63:84:45:e6',
                   'branch_id': branch_id
                 })
             ).timeout(const Duration(seconds: 20));

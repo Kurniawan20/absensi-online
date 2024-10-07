@@ -1,7 +1,7 @@
 import 'package:get/get.dart';
-import 'package:monitoring_project/home_page.dart';
-import 'package:monitoring_project/screens/login.dart';
-import 'package:monitoring_project/screens/presence.dart';
+import 'package:monitoring_project/screens/home_page.dart';
+import 'package:monitoring_project/screens/page_login.dart';
+import 'package:monitoring_project/screens/page_presence.dart';
 
 // import '../home_binding.dart';
 part 'app_routes.dart';

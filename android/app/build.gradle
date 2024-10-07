@@ -49,14 +49,14 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId "com.bas.absensimobile"
+        applicationId "com.bas.haba"
         // You can update the following values to match your application needs.
         // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-build-configuration.
         minSdkVersion 23
         targetSdkVersion 33
 //      targetSdkVersion
-        versionCode 2
-        versionName "1.0.2"
+        versionCode 8
+        versionName "1.0.7"
         multiDexEnabled true
     }
 

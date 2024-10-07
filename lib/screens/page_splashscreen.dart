@@ -1,7 +1,7 @@
 // import 'package:flutter/material.dart';
-// import 'package:splashscreen/splashscreen.dart';
+// import 'package:splashscreen/page_splashscreen.dart';
 // import '../home_page.dart';
-// import 'presence.dart';
+// import 'page_presence.dart';
 //
 // class Splashscreen extends StatelessWidget {
 //   // This widget is the root of your application.

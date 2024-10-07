@@ -1,0 +1,6 @@
+{
+  "baseUrl": "https://your_base_url",
+  "genBaseUrl": "https://your_general_base_url",
+  "apiKey": "",
+  "secretKey": ""
+}

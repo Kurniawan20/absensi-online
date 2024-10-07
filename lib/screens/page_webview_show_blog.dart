@@ -93,8 +93,9 @@ class WebViewAppState extends State<WebViewApp> {
                             )
                         )
                         ..loadRequest(
-                            method: LoadRequestMethod.post,
-                            Uri.parse('http://rsk.mcndev.my.id/api/showblog/${id}')
+                            method: LoadRequestMethod.get,
+                            Uri.parse('https://promo.bankaceh.co.id/showpromo/39')
+                            // Uri.parse('https://abs.basitd.net/api-absensi-mobile/public/api/showblog/${id}')
                         )
                       )
                   )

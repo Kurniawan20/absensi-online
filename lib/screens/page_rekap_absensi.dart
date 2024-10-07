@@ -1,10 +1,13 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:month_year_picker/month_year_picker.dart';
 import 'package:http/http.dart' as http;
+
+import 'Apis.dart';
 
 class RekapAbsensi extends StatefulWidget {
   var id;
@@ -120,14 +123,23 @@ class _RekapAbsensi extends State<RekapAbsensi> {
   bool isLoading = true;
   List<Data> data = [];
 
+  final storage = const FlutterSecureStorage();
+
   Future fetchData(String year,String month) async {
     _sharedPreferences = await SharedPreferences.getInstance();
 
-    var url = Uri.parse('http://rsk.mcndev.my.id/api/getabsen');
+    var token = await storage.read(key: 'token');
+
+    var url = Uri.parse(ApiConstants.BASE_URL+'/getabsen');
     final response = await http.post(
         url,
-        headers: {'Content-Type': 'application/json; charset=UTF-8'},
+        headers: {
+          'Content-Type': 'application/json; charset=UTF-8',
+          'Authorization': 'Bearer $token'
+        },
+
         body: jsonEncode({"npp": "${ _sharedPreferences.getString("npp")}", "year":year,"month":month})
+
     );
 
     if (response.statusCode == 200) {
@@ -143,12 +155,16 @@ class _RekapAbsensi extends State<RekapAbsensi> {
   }
 
   Future fetchData2(String year,String month) async {
-    _sharedPreferences = await SharedPreferences.getInstance();
 
-    var url = Uri.parse('http://rsk.mcndev.my.id/api/getabsen');
+    _sharedPreferences = await SharedPreferences.getInstance();
+    var token = await storage.read(key: 'token');
+    var url = Uri.parse(ApiConstants.BASE_URL+'/getabsen');
     final response = await http.post(
         url,
-        headers: {'Content-Type': 'application/json; charset=UTF-8'},
+        headers: {
+          'Content-Type': 'application/json; charset=UTF-8',
+          'Authorization': 'Bearer $token'
+        },
         body: jsonEncode({"npp": "${ _sharedPreferences.getString("npp")}", "year":year,"month":month})
     );
 
@@ -223,7 +239,9 @@ class _RekapAbsensi extends State<RekapAbsensi> {
                     ]
                   );
                 } else if (snapshot.hasError) {
+
                   return new Text('Error: ${snapshot.error}');
+
                 } else {
                   return
                   SizedBox(

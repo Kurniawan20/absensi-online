@@ -1,23 +1,24 @@
+import 'dart:ffi';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:http/http.dart' as http;
 import 'package:jwt_decode/jwt_decode.dart';
-import 'package:monitoring_project/home_page.dart';
+import 'package:monitoring_project/screens/Apis.dart';
+import 'package:monitoring_project/screens/home_page.dart';
 import 'package:monitoring_project/main.dart';
 import 'dart:convert';
 import '../widget/dialogs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-// import 'package:get_mac/get_mac.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-// import 'package:flutter/foundation.dart';
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:async';
 import 'package:android_id/android_id.dart';
 import 'package:geolocator/geolocator.dart';
-// import 'package:';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 
 class Login extends StatefulWidget {
@@ -34,10 +35,10 @@ class _LoginState extends State<Login> {
   @override
   void initState() {
     super.initState();
-    // initPlatformState();
     _initAndroidId();
     getUserCurrentLocation();
     _getId();
+    _passwordVisible = false;
   }
 
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
@@ -52,6 +53,7 @@ class _LoginState extends State<Login> {
   double radius = 0;
   String ket_bidang = "";
   String deviceId= "";
+  bool _passwordVisible = false;
 
   Future<Position> getUserCurrentLocation() async {
 
@@ -98,7 +100,6 @@ class _LoginState extends State<Login> {
       ),
     );
   }
-
 
   void fireToast(String message) {
     Fluttertoast.showToast(
@@ -230,6 +231,7 @@ class _LoginState extends State<Login> {
 
       return androidId;
     }
+
   }
 
   Future<void> doLogin(npp, password) async {
@@ -257,7 +259,7 @@ class _LoginState extends State<Login> {
       //FETCH LOGIN
       final response = await http.post(
 
-          Uri.parse("https://rsk.mcndev.my.id/api/login"),
+          Uri.parse(ApiConstants.BASE_URL+"/login"),
           headers: {'Content-Type': 'application/json; charset=UTF-8'},
           body: jsonEncode({
             "npp": npp,
@@ -266,16 +268,22 @@ class _LoginState extends State<Login> {
           })
       ).timeout( const Duration(seconds: 10));
 
+      print(jsonDecode(response.body));
+
       final output = jsonDecode(response.body);
 
       //FETCH KODE KANTOR
       if (output['rcode'] == "00") {
 
+        final storage = const FlutterSecureStorage();
+        await storage.write(key: 'token', value: output['access_token']);
+        var token = await storage.read(key: 'token');
         final getResult = await http.post(
 
-            Uri.parse("https://rsk.mcndev.my.id/api/kantor"),
+            Uri.parse(ApiConstants.BASE_URL+"/kantor"),
             headers: <String, String> {
               'Content-Type': 'application/json; charset=UTF-8',
+              'Authorization': 'Bearer $token'
             },
             body: jsonEncode(<String, String>{
               'kode_kantor': output['kode_kantor'],
@@ -330,15 +338,15 @@ class _LoginState extends State<Login> {
 
     SharedPreferences pref = await SharedPreferences.getInstance();
 
-    Map<String, dynamic> payload = Jwt.parseJwt(token);
-    DateTime? expiryDate = Jwt.getExpiryDate(token);
+    // Map<String, dynamic> payload = Jwt.parseJwt(token);
+    // DateTime? expiryDate = Jwt.getExpiryDate(token);
 
     pref.setString("npp", npp);
     pref.setString("nama", nama);
     pref.setString("token", token);
     pref.setString("kode_kantor", kode_kantor);
     pref.setString("nama_kantor", nama_kantor);
-    pref.setString("expired", expiryDate.toString());
+    // pref.setString("expired", expiryDate.toString());
     pref.setBool("is_login", true);
     pref.setDouble("lat_kantor", lat_kantor);
     pref.setDouble("long_kantor", long_kantor);
@@ -353,12 +361,22 @@ class _LoginState extends State<Login> {
     );
   }
 
+  final textFieldFocusNode = FocusNode();
+  bool _obscured = false;
+
+  void _toggleObscured() {
+    setState(() {
+      _obscured = !_obscured;
+      if (textFieldFocusNode.hasPrimaryFocus) return; // If focus is on text field, dont unfocus
+      textFieldFocusNode.canRequestFocus = false;     // Prevents focus if tap on eye
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
 
     return Scaffold(
         resizeToAvoidBottomInset: false,
-
         body: Container(
             height: MediaQuery.of(context).size.height,
             width: MediaQuery.of(context).size.width,
@@ -379,23 +397,19 @@ class _LoginState extends State<Login> {
                             SizedBox(height: 21.5),
                             /// LOGIN TEXT
                             Center(
-                              child:                   RichText(
+                              child:
+                              RichText(
                                 text: TextSpan(
                                   // text: 'Hello ',
                                   style: TextStyle(fontSize: 19),
                                   children: <TextSpan>[
-                                    TextSpan(text: 'ABSENSI ', style: TextStyle(fontWeight: FontWeight.bold,color: Color.fromRGBO(1, 101, 65, 1))),
-                                    // TextSpan(text: 'MOBILE',style: TextStyle(fontWeight: FontWeight.bold,color:Color.fromRGBO(245, 216, 0, 1))),
-                                    TextSpan(text: 'MOBILE',style: TextStyle(fontWeight: FontWeight.bold,color:Color.fromRGBO(1, 101, 65, 1))),
+                                    TextSpan(text: 'HADIR BANK ACEH ', style: TextStyle(fontWeight: FontWeight.bold,color: Color.fromRGBO(1, 101, 65, 1))),
+                                    // TextSpan(text: 'MOBILE',style: TextStyle(fontWeight: FontWeight.bold,color:Color.fromRGBO(1, 101, 65, 1))),
+                                    // TextSpan(text: 'APLIKASI HADIR BANK ACEH',style: TextStyle(fontWeight: FontWeight.bold,color:Color.fromRGBO(1, 101, 65, 1))),
                                   ],
                                 ),
                               ),
                             ),
-                            // Text('PRESENCE', style: TextStyle(color: Color.fromRGBO(1, 101, 65, 1), fontSize: 18,fontWeight: FontWeight.bold),textAlign: TextAlign.center,),
-                            // Text('MOBILE', style: TextStyle(color: Color.fromRGBO(1, 101, 65, 1), fontSize: 18,fontWeight: FontWeight.bold),textAlign: TextAlign.center,),
-                            // SizedBox(height: 10),
-                            /// WELCOME
-                            // Text('SIGN IN', style: TextStyle(color: Color.fromRGBO(1, 101, 65, 1), fontSize: 17, fontWeight: FontWeight.w500),textAlign: TextAlign.center),
                           ],
                         ),
                       ),
@@ -407,73 +421,100 @@ class _LoginState extends State<Login> {
                             // color: Colors.white,
                             color: Color.fromRGBO(1, 101, 65, 1),
                             borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(58),
-                              topRight: Radius.circular(58),
+                              topLeft: Radius.circular(35),
+                              topRight: Radius.circular(35),
                             ),
                           ),
                           child: SingleChildScrollView(
-                            child: Column(
+                            child:
+                            Column(
                               children: [
-                                const SizedBox(height: 60),
+                                const SizedBox(height: 20),
                                 /// Text Fields
                                 Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 25),
-                                  height: 120,
+                                  margin: const EdgeInsets.symmetric(horizontal: 15),
                                   width: MediaQuery.of(context).size.width,
-                                  decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(10),
-                                      boxShadow: [
-                                        BoxShadow(
-                                            color: Colors.black87.withOpacity(0.4),
-                                            // color: Colors.white,
-                                            blurRadius: 7,
-                                            // spreadRadius: 1,
-                                            offset: const Offset(0, 0)
-                                        ),
-                                      ]
-                                  ),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                  child:
+                                  Column(
+
+                                    mainAxisAlignment: MainAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Flexible(
+                                      Padding(
+                                          padding: EdgeInsets.fromLTRB(10, 10, 10, 0),
+                                          child: Text("NRK",style: TextStyle(color: Colors.white,fontWeight: FontWeight.w500)),
+                                      ),
+                                      Padding (
+                                          padding: EdgeInsets.fromLTRB(10, 4, 10, 0),
                                           child: TextFormField(
                                             style: TextStyle(fontSize: 14),
                                             decoration: InputDecoration (
                                               contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                                              border: InputBorder.none,
-                                              hintText: 'NRK',
+                                              hintText: '',
+                                              fillColor: Colors.white,
+                                              filled: true,
+                                              border: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(11.0),
+                                              ),
+                                              focusedBorder:OutlineInputBorder(
+                                                borderSide: const BorderSide(color: Colors.white, width: 2.0),
+                                                borderRadius: BorderRadius.circular(11.0),
+                                              ),
                                               isCollapsed: false,
                                               hintStyle: TextStyle(fontSize: 14, color: Colors.grey),
+                                              prefixIcon: Icon(Icons.person),
+                                                prefixIconColor: MaterialStateColor.resolveWith((states) =>
+                                                states.contains(MaterialState.focused)
+                                                    ? Colors.black
+                                                    : Colors.grey)
                                             ),
                                             controller: txtEditEmail,
-                                            onSaved: (String? val) {
-                                              txtEditEmail.text = val!;
-                                            },
-                                            validator: (String? arg) {
-                                              if (arg == null || arg.isEmpty) {
-                                                return 'NRK tidak boleh kosong!';
-                                              } else {
-                                                return null;
-                                              }
-                                            },
                                           ),
                                       ),
-                                      Divider(color: Colors.black54, height: 1),
-                                      Flexible(
+                                      Padding(
+                                        padding: EdgeInsets.fromLTRB(10, 10, 10, 0),
+                                        child: Text("Password",style: TextStyle(color: Colors.white,fontWeight: FontWeight.w500)),
+                                      ),
+                                      Padding (
+                                        padding: EdgeInsets.fromLTRB(10, 4, 10, 10),
                                           child: TextFormField(
                                             decoration: InputDecoration(
-                                              contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                                              border: InputBorder.none,
-                                              hintText: 'Password',
-                                              isCollapsed: false,
-                                              hintStyle: TextStyle(fontSize: 14, color: Colors.grey),
+                                                contentPadding: EdgeInsets.symmetric(horizontal: 10),
+                                                hintText: '',
+                                                fillColor: Colors.white,
+                                                filled: true,
+                                                border: OutlineInputBorder(
+                                                  borderRadius: BorderRadius.circular(11.0),
+                                                ),
+                                                focusedBorder:OutlineInputBorder(
+                                                  borderSide: const BorderSide(color: Colors.white, width: 2.0),
+                                                  borderRadius: BorderRadius.circular(11.0),
+                                                ),
+                                                isCollapsed: false,
+                                                hintStyle: TextStyle(fontSize: 14, color: Colors.black),
+                                                prefixIcon: Icon(Icons.lock_rounded, size: 22,),
+                                                prefixIconColor: Colors.grey,
+                                                suffixIcon: IconButton(
+                                                  color: Colors.grey.withOpacity(0.5),
+                                                    icon: Icon(
+                                                      size: 22,
+                                                      _passwordVisible
+                                                          ? Icons.visibility
+                                                          : Icons.visibility_off,
+
+                                                    ),
+                                                  onPressed: () {
+                                                      setState(() {
+                                                        _passwordVisible = !_passwordVisible;
+                                                      });
+                                                  },
+                                                )
                                             ),
                                             controller: txtEditPwd,
                                             onSaved: (String? val) {
                                               txtEditPwd.text = val!;
                                             },
-                                            obscureText: true,
+                                            obscureText: !_passwordVisible,
                                             enableSuggestions: false,
                                             autocorrect: false,
                                             validator: (String? arg) {
@@ -488,24 +529,32 @@ class _LoginState extends State<Login> {
                                     ],
                                   ),
                                 ),
-                                const SizedBox(height: 35),
+                                const SizedBox(height: 60),
                                 /// LOGIN BUTTON
-                                MaterialButton(
-                                  onPressed: () => {
-                                    _validateInputs(),
-                                    // initMacAddress(),
-                                  } ,
-                                  height: 45,
-                                  minWidth: 250,
-                                  child: const Text('Login', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),),
-                                  textColor: Color.fromRGBO(1, 101, 65, 1),
-                                  color: Colors.white,
-                                  shape: const StadiumBorder(),
+                                Container(
+                                    margin: const EdgeInsets.symmetric(horizontal: 25),
+                                    height: 50,
+                                    width: MediaQuery.of(context).size.width,
+                                    child:
+                                      ElevatedButton(
+                                        child: const Text('Log in', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900,color:Color.fromRGBO(1, 101, 65, 1)),),
+                                        style: ButtonStyle(
+                                            backgroundColor: MaterialStateProperty.all<Color>(Colors.white),
+                                            shape: MaterialStateProperty.all<RoundedRectangleBorder>(
+                                                RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(10.0),
+                                                )
+                                        ),
+                                        ),
+                                        onPressed: () => {
+                                          _validateInputs(),
+                                        } ,
+                                      )
                                 ),
                                 const SizedBox(height: 50),
                                 Text(
-                                  "version 1.0",
-                                  style: TextStyle(color: Colors.white,fontSize: 13),
+                                  "Version 1.0",
+                                  style: TextStyle(color: Colors.white,fontSize: 12),
                                 )
                               ],
                             ),

@@ -1,26 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:monitoring_project/screens/webviewShowBlog.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:webview_flutter_android/webview_flutter_android.dart';
-import 'package:http/http.dart' as http;
-
-// void main() {
-//   runApp(
-//     const MaterialApp(
-//       home: WebViewSlider(),
-//     ),
-//   );
-// }
-//
-// class WebViewSlider extends StatefulWidget {
-//   const WebViewSlider({Key? key}) : super(key: key);
-//
-//   @override
-//   State<WebViewSlider> createState() => _WebViewSliderState();
-// }
 
 class WebViewSlider extends StatelessWidget {
 
@@ -29,7 +10,6 @@ class WebViewSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // print("idddd " + text);
 
     return Scaffold(
       appBar: AppBar(

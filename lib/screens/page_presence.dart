@@ -5,12 +5,14 @@ import 'package:device_info/device_info.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
+import 'package:monitoring_project/screens/Apis.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import './login.dart';
+import './page_login.dart';
 import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platform_interface.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
@@ -119,7 +121,7 @@ class _PresenceState extends State<Presence> {
 
 
 
-  void _checkRadius() async {
+  void _checkRadius(String absenType) async {
 
       getUserCurrentLocation().then((value) async {
 
@@ -133,7 +135,8 @@ class _PresenceState extends State<Presence> {
         this._inRadius = distance < radius;
       });
 
-      _absen(value.latitude, value.longitude);
+      _absen(value.latitude, value.longitude, absenType);
+
     });
   }
 
@@ -161,8 +164,9 @@ class _PresenceState extends State<Presence> {
       barrierDismissible: false,
       context: context,
       type: QuickAlertType.loading,
-      title: 'Loading',
+      title: 'Mohon Tunggu',
       text:  'Sedang memproses absensi..',
+
     );
   }
 
@@ -187,26 +191,53 @@ class _PresenceState extends State<Presence> {
   }
 
   void _fetchDialogWarning(BuildContext context, String message, [bool mounted = true]) async {
+
+    QuickAlert.show(
+      context: context,
+      type: QuickAlertType.error,
+      title: "Oops...",
+      text: message,
+      confirmBtnColor : Color.fromRGBO(1, 101, 65, 1),
+      confirmBtnText: 'Oke',
+    );
+  }
+
+  void _konfirmasiAbsenPulang(BuildContext context, String message, [bool mounted = true]) async {
     // show the loading dialog
     showDialog(
       // The user CANNOT close this dialog  by pressing outsite it
       barrierDismissible: false,
       context: context,
       builder: (BuildContext context) => AlertDialog(
-        backgroundColor: Colors.yellow,
-        title: const Text('Gagal!',style: TextStyle(color: Colors.black),),
-        content: Text(message),
+        backgroundColor: Colors.white,
+        title: const Text('Konfirmasi Absensi',style: TextStyle(color: Colors.black,fontWeight:FontWeight.bold),),
+        content: Text("Apakah anda yakin akan melakukan absen pulang?"),
         actions: <Widget>[
           TextButton(
-            onPressed: () => Navigator.pop(context, 'OK'),
-            child: const Text('OK',style: TextStyle(color: Colors.black)),
+            onPressed: () => Navigator.pop(context, 'Batal'),
+            child: const Text('Batal',style: TextStyle(color: Colors.black,fontSize: 12)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Color.fromRGBO(1, 101, 65, 1),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.all(10.0),
+              textStyle: const TextStyle(fontSize: 10),
+            ),
+            onPressed: () {
+              Navigator.of(context,rootNavigator: true).pop(context);
+              _checkRadius('absenpulang');
+              _fetchData(context);
+            },
+            child: const Text('Pulang'),
           ),
         ],
       ),
     );
+
   }
 
-  Future<String> _absen(double lat, double long) async {
+  Future<String> _absen(double lat, double long, String absenType) async {
 
     final prefs = await SharedPreferences.getInstance();
     final branch_id = prefs.getString("kode_kantor").toString();
@@ -241,7 +272,6 @@ class _PresenceState extends State<Presence> {
 
     }
 
-
     try {
       jailbroken = await FlutterJailbreakDetection.jailbroken;
       developerMode = await FlutterJailbreakDetection.developerMode;
@@ -256,6 +286,7 @@ class _PresenceState extends State<Presence> {
     print("JAILBREAK MODE ${_jailbroken}");
 
     if(_developerMode == true) {
+
       var message = "Mohon matikan developer mode anda!";
 
       Navigator.of(context,rootNavigator: true).pop(context);
@@ -270,8 +301,9 @@ class _PresenceState extends State<Presence> {
       );
 
       return "absen gagal";
+    }
 
-    }else if(!isPhysicalDevice == false) {
+    else if(isPhysicalDevice == false) {
 
       var message = "Anda terdeteksi menggunakan emulator!";
 
@@ -290,10 +322,15 @@ class _PresenceState extends State<Presence> {
     }
 
     try {
+
+      final storage = const FlutterSecureStorage();
+      var token = await storage.read(key: 'token');
+
       final getResult = await http.post(
-          Uri.parse("https://rsk.mcndev.my.id/api/checksession"),
-          headers: <String, String>{
+          Uri.parse(ApiConstants.BASE_URL+"/checksession"),
+          headers: <String, String> {
             'Content-Type': 'application/json; charset=UTF-8',
+            'Authorization': 'Bearer $token'
           },
           body: jsonEncode(<String, String>{
             'npp': nrk.toString(),
@@ -304,19 +341,18 @@ class _PresenceState extends State<Presence> {
       final result = getResult.body.toString().replaceAll('""', "");
 
       if (jsonDecode(result)['rcode'] == "00") {
-
         if (this._inRadius) {
           try {
             final getResult = await http.post(
-                Uri.parse("https://rsk.mcndev.my.id/api/simpanabsen"),
+                Uri.parse(ApiConstants.BASE_URL+"/"+absenType),
                 headers: <String, String> {
                   'Content-Type': 'application/json; charset=UTF-8',
+                  'Authorization': 'Bearer $token'
                 },
                 body: jsonEncode(<String, String> {
                   'npp': nrk.toString(),
                   'latitude': lat.toString(),
                   'longitude': long.toString(),
-                  // 'device_info': '00:1b:63:84:45:e6',
                   'branch_id': branch_id
                 })
             ).timeout(const Duration(seconds: 20));
@@ -349,19 +385,21 @@ class _PresenceState extends State<Presence> {
                 title: "Info",
                 text: message,
                 confirmBtnText: 'Oke',
-                confirmBtnColor: Color.fromRGBO(1, 101, 65, 1),
+                // confirmBtnColor: Color.fromRGBO(1, 101, 65, 1),
+
               );
             }
           } on TimeoutException catch (_) {
 
             Navigator.of(context,rootNavigator: true).pop(context);
-            _fetchDialog(context, "Timeout");
+            _fetchDialogWarning(context, "Koneksi timeout, silahkan coba lagi");
 
           } catch (e) {
 
             Navigator.of(context,rootNavigator: true).pop(context);
-            _fetchDialog(context, "Timeout");
+            _fetchDialogWarning(context, "Koneksi timeout, silahkan coba lagi");
           }
+
         }else {
 
           var message = "Anda berada diluar lokasi absen!";
@@ -381,17 +419,19 @@ class _PresenceState extends State<Presence> {
         }
 
       }else {
-        signOut();
+        Navigator.of(context,rootNavigator: true).pop(context);
+        _fetchDialogWarning(context, "Terjadi Kesalahan, silahkan coba lagi");
       }
     } on TimeoutException catch (_) {
       Navigator.of(context, rootNavigator: true).pop(context);
-      _fetchDialog(context, "Timeout");
+      _fetchDialogWarning(context, "Koneksi timeout, silahkan coba lagi");
     } catch (e) {
       Navigator.of(context, rootNavigator: true).pop(context);
-      _fetchDialog(context, "Timeout" + e.toString());
+      _fetchDialogWarning(context, "Koneksi timeout, silahkan coba lagi" + e.toString());
     }
 
     return "nrk";
+
   }
 
   signOut() async {
@@ -415,7 +455,7 @@ class _PresenceState extends State<Presence> {
     return Scaffold (
         appBar: AppBar(
             title: Text(
-                'Presence',
+                'Absensi',
                       style: TextStyle(fontSize: 18,fontWeight: FontWeight.w500),
             ),
             actions: [
@@ -485,118 +525,132 @@ class _PresenceState extends State<Presence> {
                   ),
                   ]
                   ),
-                  child: Card(
-                    margin: EdgeInsets.zero,
-                    color: Colors.orangeAccent[600],
-                    elevation: 20,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.only(topLeft:Radius.circular(40),topRight: Radius.circular(40))
-                    ),
-                    clipBehavior: Clip.hardEdge,
-                    child: Padding(
-                      padding: EdgeInsets.all(0.0),
-                      child:
-                        SizedBox(
-                          height: 100,
-                          width: double.infinity,
-                          child:
-                          Padding(
-                            padding: EdgeInsets.all(20),
-                            child:
-                            Column(
-                              children: [
-                                Text( 'Silahkan Melakukan Absensi',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                ),
-                                SizedBox(
-                                  width: 10,
-                                  height: 15,
-                                ),
-                                
-                                StreamBuilder(
-                                    builder: (context,snapshot) {
-                                      return  Text(
-                                        DateFormat('kk:mm:ss').format(DateTime.now()), textAlign: TextAlign.center,
-                                        style: TextStyle(fontSize: 14,fontWeight: FontWeight.w600),
-                                      );
-                                    },
-                                    stream: Stream.periodic(const Duration(seconds: 1)),
-                                ),
+                  child:
+                        Card(
+                            margin: EdgeInsets.zero,
+                            color: Colors.orangeAccent[600],
+                            elevation: 20,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.only(topLeft:Radius.circular(30),topRight: Radius.circular(30))
+                            ),
+                            clipBehavior: Clip.hardEdge,
+                            child: Padding(
+                              padding: EdgeInsets.all(0.0),
+                              child:
+                              SizedBox(
+                                height: 200,
+                                width: double.infinity,
+                                child:
+                                Padding(
+                                    padding: EdgeInsets.all(20),
+                                    child:
+                                    Column(
+                                      children: [
+                                        Text( 'Silahkan Melakukan Absensi',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                        ),
+                                        SizedBox(
+                                          width: 10,
+                                          height: 15,
+                                        ),
 
-                                SizedBox(
-                                  width: 10,
-                                  height: 4,
-                                ),
-                                Text(
-                                  DateFormat('EEEE dd MMMM','id').format(DateTime.now()), textAlign: TextAlign.center,
-                                ),
-                                SizedBox(
-                                  width: 10,
-                                  height: 30,
-                                ),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    ElevatedButton(
-                                      onPressed: () {
-                                        // _checkLogin();
-                                        _checkRadius();
-                                        _fetchData(context);
-                                      } ,
-                                      child: Text("Absensi",style: TextStyle(color: Color.fromRGBO(1, 101, 65, 1),fontWeight: FontWeight.w500),),
-                                      style:
-                                      // raisedButtonStyle
-                                      ElevatedButton.styleFrom(
-                                        onPrimary: Colors.white,
-                                        primary: Colors.white,
-                                        // side: const BorderSide(color: Color.fromRGBO(1, 101, 65, 1),width: 1.9),
-                                        side: const BorderSide(color: Color.fromRGBO(1, 101, 65, 1),width: 1.9),
-                                        minimumSize: Size(100, 40),
-                                      ),
-                                    ),
-                                    SizedBox(
-                                      width: 10,
-                                      height: 15,
-                                    ),
-                                    ElevatedButton(
-                                      onPressed: () async {
-                                        getUserCurrentLocation().then((value) async {
-                                          print(value.latitude.toString() +"  "+value.longitude.toString());
+                                        StreamBuilder(
+                                          builder: (context,snapshot) {
+                                            return  Text(
+                                              DateFormat('kk:mm:ss').format(DateTime.now()), textAlign: TextAlign.center,
+                                              style: TextStyle(fontSize: 14,fontWeight: FontWeight.w600),
+                                            );
+                                          },
+                                          stream: Stream.periodic(const Duration(seconds: 1)),
+                                        ),
 
-                                          // specified current users location
-                                          CameraPosition cameraPosition = new CameraPosition(
-                                            // target: LatLng(latKantor, longKantor),
-                                            target: LatLng(latKantor, longKantor),
-                                            zoom: 17,
-                                          );
+                                        SizedBox(
+                                          width: 10,
+                                          height: 4,
+                                        ),
+                                        Text(
+                                          DateFormat('EEEE dd MMMM','id').format(DateTime.now()), textAlign: TextAlign.center,
+                                        ),
+                                        SizedBox(
+                                          width: 10,
+                                          height: 30,
+                                        ),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          crossAxisAlignment: CrossAxisAlignment.center,
+                                          children: [
+                                            ElevatedButton(
+                                              onPressed: () {
+                                                _checkRadius("absenmasuk");
+                                                _fetchData(context);
+                                              } ,
+                                              child: Text("Masuk",style: TextStyle(color: Colors.white,fontWeight: FontWeight.w500),),
+                                              style:
+                                              // raisedButtonStyle
+                                              ElevatedButton.styleFrom(
+                                                onPrimary:Color.fromRGBO(1, 101, 65, 1),
+                                                primary: Color.fromRGBO(1, 101, 65, 1),
+                                                minimumSize: Size(100, 40),
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              width: 10,
+                                              height: 15,
+                                            ),
+                                            ElevatedButton(
+                                              onPressed: () async {
+                                                getUserCurrentLocation().then((value) async {
+                                                  print(value.latitude.toString() +"  "+value.longitude.toString());
 
-                                          final GoogleMapController controller = await _controller.future;
-                                          controller.animateCamera(CameraUpdate.newCameraPosition(cameraPosition));
-                                          setState(() {
-                                          });
-                                        });
-                                      },
-                                      // child: Icon(Icons.location_city_sharp),
-                                      child: Text("Lokasi Kantor"),
-                                      style:
-                                      // raisedButtonStyle
-                                      ElevatedButton.styleFrom(
-                                        onPrimary: Colors.white,
-                                        primary: Color.fromRGBO(1, 101, 65, 1),
-                                        // primary: Color.fromRGBO(245, 216, 0, 1),
-                                        minimumSize: Size(50, 40),
-                                      ),
-                                    ),
-                                  ],
+                                                  // specified current users location
+                                                  CameraPosition cameraPosition = new CameraPosition(
+                                                    // target: LatLng(latKantor, longKantor),
+                                                    target: LatLng(latKantor, longKantor),
+                                                    zoom: 17,
+                                                  );
+                                                  final GoogleMapController controller = await _controller.future;
+                                                  controller.animateCamera(CameraUpdate.newCameraPosition(cameraPosition));
+                                                  setState(() {
+                                                  });
+                                                });
+                                              },
+                                              child: Icon(Icons.location_city_sharp,color: Color.fromRGBO(1, 101, 65, 1)),
+                                              style:
+                                              ElevatedButton.styleFrom(
+                                                onPrimary: Colors.white,
+                                                primary: Colors.white,
+                                                side: const BorderSide(color: Color.fromRGBO(1, 101, 65, 1),width: 1.9),
+                                                minimumSize: Size(50, 40),
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              width: 10,
+                                              height: 15,
+                                            ),
+                                            ElevatedButton (
+                                              onPressed: () {
+                                                _konfirmasiAbsenPulang(context, "message");
+                                                // _checkRadius('absenpulang');
+                                                // _fetchData(context);
+                                              } ,
+                                              child: Text("Pulang",style: TextStyle(color:Colors.white,fontWeight: FontWeight.w500),),
+                                              style:
+
+                                              ElevatedButton.styleFrom(
+                                                onPrimary:Color.fromRGBO(1, 101, 65, 1),
+                                                primary: Color.fromRGBO(1, 101, 65, 1),
+                                                minimumSize: Size(100, 40),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    )
                                 ),
-                              ],
+                              ),
                             )
-                          ),
                         ),
-                    )
-                  )
               ),
             )
           ],

@@ -75,6 +75,9 @@ dependencies:
   lottie: ^1.4.3
   flutter_jailbreak_detection: ^1.10.0
   flutter_launcher_icons: ^0.12.0
+  flutter_secure_storage: ^8.1.0
+  firebase_core: ^2.24.2
+  firebase_messaging: ^14.7.10
 #  convex_bottom_bar: ^3.2.0
 #  location_permissions: ^3.0.0
 #  month_year_picker: ^0.2.0+2
@@ -88,7 +91,7 @@ dev_dependencies:
 flutter_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/icons/ic_launcher/res/mipmap-xxxhdpi/ic_launcher.png"
+  image_path: "assets/icons/ic_launcher/res/mipmap-xxxhdpi/ic_launcher_round.png"
 
 
   # The "flutter_lints" package below contains a set of recommended lints to
@@ -111,6 +114,8 @@ flutter:
   assets:
      - assets/images/Logo_Bank_Aceh_Syariah.png
      - assets/locations.json
+     - assets/images/launcher_icon.png
+     - assets/images/ic_launcher_round.png
 #     - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see

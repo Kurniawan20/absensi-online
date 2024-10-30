@@ -4,7 +4,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:monitoring_project/screens/emulator_warning.dart';
+import 'package:monitoring_project/widget/emulator_warning.dart';
 import 'package:month_year_picker/month_year_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/home_page.dart';
@@ -67,35 +67,12 @@ class _MyMainState extends State<MyMain> with WidgetsBindingObserver{
       if(_developerMode == true) {
         var message = "Mohon matikan developer mode anda!";
         print(message);
-
       }
-
     });
-
-
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    switch (state) {
-      case AppLifecycleState.resumed:
-        break;
-      case AppLifecycleState.inactive:
-        break;
-      case AppLifecycleState.paused:
-        break;
-      case AppLifecycleState.detached:
-        break;
-      default:
-        break;
-    }
   }
 
   SharedPreferences? preferences;
   bool season = true;
-  // late final NotificationService notificationService;
-
   bool isLogin = false;
 
   Future<void> _checkLogin() async {
@@ -108,6 +85,7 @@ class _MyMainState extends State<MyMain> with WidgetsBindingObserver{
     print(androidInfo.isPhysicalDevice);
 
     if(androidInfo.isPhysicalDevice == false) {
+
       var message = "Anda terdeteksi menggunakan emulator!";
       Navigator.pushReplacement(
           context, MaterialPageRoute(builder: (context) => EmulatorWarning(message: message,))
@@ -123,8 +101,6 @@ class _MyMainState extends State<MyMain> with WidgetsBindingObserver{
       }
     }
   }
-
-
 
   int currentIndex = 0;
 
@@ -160,7 +136,6 @@ class _MyMainState extends State<MyMain> with WidgetsBindingObserver{
           icon: Container(
               padding: EdgeInsets.fromLTRB(0, 0, 0, 4),
               child: Icon(FluentIcons.presence_away_24_filled,size: 28  ,)),
-
         ),
       ],
       selectedLabelStyle: TextStyle(fontSize: 14,fontWeight: FontWeight.w500),
@@ -190,6 +165,7 @@ class _MyMainState extends State<MyMain> with WidgetsBindingObserver{
                   GlobalWidgetsLocalizations.delegate,
                   GlobalMaterialLocalizations.delegate,
                   MonthYearPickerLocalizations.delegate
+
                   ]
               );
             }

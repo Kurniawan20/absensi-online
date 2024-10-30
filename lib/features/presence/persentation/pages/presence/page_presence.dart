@@ -13,10 +13,11 @@ import 'package:http/http.dart' as http;
 import 'package:monitoring_project/controller/PresenceController.dart';
 import 'package:monitoring_project/screens/Apis.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import './page_login.dart';
 import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platform_interface.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
+
+import '../../../../../screens/page_login.dart';
 
 void main() => runApp(const Presence());
 
@@ -302,7 +303,6 @@ class _PresenceState extends State<Presence> {
       );
 
       return "absen gagal";
-
     }
 
     else if(isPhysicalDevice == false) {

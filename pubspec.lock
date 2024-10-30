@@ -162,6 +162,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "0.7.10"
+  dependencies:
+    dependency: "direct main"
+    description:
+      name: dependencies
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "0.1.5"
   device_info:
     dependency: "direct main"
     description:
@@ -190,6 +197,27 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "7.0.1"
+  dio:
+    dependency: "direct main"
+    description:
+      name: dio
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "5.7.0"
+  dio_web_adapter:
+    dependency: transitive
+    description:
+      name: dio_web_adapter
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "1.0.1"
+  disposables:
+    dependency: transitive
+    description:
+      name: disposables
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "0.1.2"
   email_validator:
     dependency: "direct main"
     description:
@@ -326,13 +354,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  flutter_month_picker:
-    dependency: "direct main"
-    description:
-      name: flutter_month_picker
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "0.0.2"
   flutter_native_timezone:
     dependency: "direct main"
     description:
@@ -665,13 +686,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.8.0"
-  month_picker_dialog_2:
-    dependency: "direct main"
-    description:
-      name: month_picker_dialog_2
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "0.6.1+2"
   month_year_picker:
     dependency: "direct main"
     description:
@@ -784,6 +798,20 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.1.0"
+  quiver:
+    dependency: transitive
+    description:
+      name: quiver
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "2.1.5"
+  retrofit:
+    dependency: "direct main"
+    description:
+      name: retrofit
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "4.2.0"
   rxdart:
     dependency: "direct main"
     description:

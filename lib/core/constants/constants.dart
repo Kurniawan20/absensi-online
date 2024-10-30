@@ -1,0 +1,1 @@
+const String baseUrlPresence = "http://103.168.124.40:31845";

@@ -1,28 +1,23 @@
-import 'dart:ffi';
-
-import 'package:flutter/gestures.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:http/http.dart' as http;
-import 'package:jwt_decode/jwt_decode.dart';
-import 'package:monitoring_project/screens/Apis.dart';
-import 'package:monitoring_project/screens/home_page.dart';
-import 'package:monitoring_project/main.dart';
-import 'dart:convert';
-import '../widget/dialogs.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'dart:developer' as developer;
-import 'dart:io';
-import 'dart:async';
 import 'package:android_id/android_id.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../bloc/login/login_bloc.dart';
+import '../bloc/login/login_event.dart';
+import '../bloc/login/login_state.dart';
+import '../widget/dialogs.dart';
+import './main_layout.dart';
+import '../services/biometric_service.dart';
+import '../services/secure_storage_service.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-
 class Login extends StatefulWidget {
-
   const Login({Key? key}) : super(key: key);
   static const String id = 'login';
 
@@ -31,539 +26,969 @@ class Login extends StatefulWidget {
 }
 
 class _LoginState extends State<Login> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final TextEditingController txtEditEmail = TextEditingController();
+  final TextEditingController txtEditPwd = TextEditingController();
+  final FocusNode textFieldFocusNode = FocusNode();
+  final BiometricService _biometricService = BiometricService();
+  final SecureStorageService _secureStorage = SecureStorageService();
+
+  bool _passwordVisible = false;
+  String _androidId = 'Unknown';
+  Position? _currentPosition;
+  bool _isBiometricAvailable = false;
+  bool _showBiometricButton = false;
+  bool _biometricEnabled = false;
 
   @override
   void initState() {
     super.initState();
-    _initAndroidId();
-    getUserCurrentLocation();
-    _getId();
-    _passwordVisible = false;
+    _initializeData();
   }
 
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  var  txtEditEmail = TextEditingController();
-  var  txtEditPwd = TextEditingController();
-  String token = "";
-  String nama = "";
-  String kode_kantor = "";
-  String nama_kantor = "";
-  double lat_kantor = 0;
-  double long_kantor = 0;
-  double radius = 0;
-  String ket_bidang = "";
-  String deviceId= "";
-  bool _passwordVisible = false;
+  Future<void> _initializeData() async {
+    await _initAndroidId();
+    await _getUserCurrentLocation();
+    await _initializeBiometric();
+    context.read<LoginBloc>().add(InitializeLoginData());
+  }
 
-  Future<Position> getUserCurrentLocation() async {
+  Future<void> _initializeBiometric() async {
+    print('Initializing biometric...');
+    final isBiometricAvailable = await _biometricService.isBiometricAvailable();
+    final biometrics = await _biometricService.getAvailableBiometrics();
+    final isEnabled = await _secureStorage.isBiometricEnabled();
+    final credentials = await _secureStorage.getCredentials();
 
-    bool serviceEnabled;
-    LocationPermission permission;
+    print('Biometric check:');
+    print('- Available: $isBiometricAvailable');
+    print('- Biometrics: $biometrics');
+    print('- Enabled: $isEnabled');
+    print('- Has credentials: ${credentials != null}');
 
-    permission = await Geolocator.checkPermission();
+    if (mounted) {
+      setState(() {
+        _isBiometricAvailable = isBiometricAvailable && biometrics.isNotEmpty;
+        _biometricEnabled = isEnabled;
+        // Only show button if biometric is both available and enabled
+        _showBiometricButton =
+            _isBiometricAvailable && isEnabled && credentials != null;
+      });
+    }
 
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
+    // Add listener to email field after initialization
+    txtEditEmail.addListener(_onEmailChanged);
+  }
+
+  void _onEmailChanged() async {
+    if (!_isBiometricAvailable || !_biometricEnabled) {
+      setState(() => _showBiometricButton = false);
+      return;
+    }
+
+    final credentials = await _secureStorage.getCredentials();
+    if (credentials == null) {
+      setState(() => _showBiometricButton = false);
+      return;
+    }
+
+    final showButton =
+        txtEditEmail.text.isEmpty || credentials['email'] == txtEditEmail.text;
+    print('Email check:');
+    print('- Current email: ${txtEditEmail.text}');
+    print('- Stored email: ${credentials['email']}');
+    print('- Show button: $showButton');
+
+    setState(() => _showBiometricButton = showButton);
+  }
+
+  @override
+  void dispose() {
+    txtEditEmail.removeListener(_onEmailChanged);
+    txtEditEmail.dispose();
+    txtEditPwd.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initAndroidId() async {
+    try {
+      if (Platform.isAndroid) {
+        _androidId = await AndroidId().getId() ?? 'Unknown ID';
+      } else if (Platform.isIOS) {
+        final deviceInfo = DeviceInfoPlugin();
+        final iosInfo = await deviceInfo.iosInfo;
+        _androidId = iosInfo.identifierForVendor ?? 'Unknown ID';
+      }
+    } on PlatformException {
+      _androidId = 'Failed to get Device ID';
+    }
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _getUserCurrentLocation() async {
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        _fetchDialogWarning(context, "Mohon izikan akses lokasi untuk menggunakan aplikasi ini");
-        return Future.error('Location permissions are denied');
+        if (permission == LocationPermission.denied) {
+          // Handle denied permission without showing alert
+          print('Location permission denied');
+          return;
+        }
       }
-    }
 
-    if (permission == LocationPermission.deniedForever) {
-      // Permissions are denied forever, handle appropriately.
-      permission = await Geolocator.requestPermission();
-      _fetchDialogWarning(context, "Mohon izikan akses lokasi untuk menggunakan aplikasi ini");
-      return Future.error('Location permissions are permanently denied, we cannot request permissions.');
-    }
+      if (permission == LocationPermission.deniedForever) {
+        // Handle permanently denied permission without showing alert
+        print('Location permission permanently denied');
+        return;
+      }
 
-    return await Geolocator.getCurrentPosition();
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      if (mounted) {
+        setState(() {
+          _currentPosition = position;
+        });
+      }
+    } catch (e) {
+      print('Error getting location: $e');
+    }
   }
 
-  void _fetchDialogWarning(BuildContext context, String message, [bool mounted = true]) async {
-    // show the loading dialog
+  void _showDialogWarning(String message) {
     showDialog(
-      // The user CANNOT close this dialog  by pressing outsite it
       barrierDismissible: false,
       context: context,
       builder: (BuildContext context) => AlertDialog(
         backgroundColor: Colors.white,
-        title: const Text('Gagal!',style: TextStyle(color: Colors.black),),
+        title: const Text('Gagal!', style: TextStyle(color: Colors.black)),
         content: Text(message),
         actions: <Widget>[
           TextButton(
             onPressed: () => SystemNavigator.pop(),
-            child: const Text('OK',style: TextStyle(color: Colors.black)),
+            child: const Text('OK', style: TextStyle(color: Colors.black)),
           ),
         ],
       ),
     );
   }
 
-  void fireToast(String message) {
+  void _fireToast(String message, {bool isError = true}) {
     Fluttertoast.showToast(
-        msg: message,
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.CENTER,
-        timeInSecForIosWeb: 1,
-        backgroundColor: Colors.red,
-        textColor: Colors.white,
-        fontSize: 16.0
+      msg: message,
+      toastLength: Toast.LENGTH_SHORT,
+      gravity: ToastGravity.CENTER,
+      timeInSecForIosWeb: 1,
+      backgroundColor: isError ? Colors.red : Colors.green.shade900,
+      textColor: Colors.white,
+      fontSize: 16.0,
     );
   }
 
-  void fireToast2(String message) {
-    Fluttertoast.showToast(
-        msg: message,
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM,
-        timeInSecForIosWeb: 1,
-        backgroundColor: Colors.green.shade900,
-        textColor: Colors.white,
-        fontSize: 16.0
-    );
-  }
-
-  void _validateInputs() {
-    if (_formKey.currentState!.validate()) {
-      //If all data are correct then save data to out variables
-      _formKey.currentState!.save();
-      doLogin(txtEditEmail.text, txtEditPwd.text);
-    }
-  }
-
-  static final DeviceInfoPlugin deviceInfoPlugin = DeviceInfoPlugin();
-  Map<String, dynamic> _deviceData = <String, dynamic>{};
-
-  Map<String, dynamic> _readAndroidBuildData(AndroidDeviceInfo build) {
-    return <String, dynamic>{
-      'version.securityPatch': build.version.securityPatch,
-      'version.sdkInt': build.version.sdkInt,
-      'version.release': build.version.release,
-      'version.previewSdkInt': build.version.previewSdkInt,
-      'version.incremental': build.version.incremental,
-      'version.codename': build.version.codename,
-      'version.baseOS': build.version.baseOS,
-      'board': build.board,
-      'bootloader': build.bootloader,
-      'brand': build.brand,
-      'device': build.device,
-      'display': build.display,
-      'fingerprint': build.fingerprint,
-      'hardware': build.hardware,
-      'host': build.host,
-      'id': build.id,
-      'manufacturer': build.manufacturer,
-      'model': build.model,
-      'product': build.product,
-      'supported32BitAbis': build.supported32BitAbis,
-      'supported64BitAbis': build.supported64BitAbis,
-      'supportedAbis': build.supportedAbis,
-      'tags': build.tags,
-      'type': build.type,
-      'isPhysicalDevice': build.isPhysicalDevice,
-      'systemFeatures': build.systemFeatures,
-      'displaySizeInches':
-      ((build.displayMetrics.sizeInches * 10).roundToDouble() / 10),
-      'displayWidthPixels': build.displayMetrics.widthPx,
-      'displayWidthInches': build.displayMetrics.widthInches,
-      'displayHeightPixels': build.displayMetrics.heightPx,
-      'displayHeightInches': build.displayMetrics.heightInches,
-      'displayXDpi': build.displayMetrics.xDpi,
-      'displayYDpi': build.displayMetrics.yDpi,
-    };
-  }
-
-  Map<String, dynamic> _readIosDeviceInfo(IosDeviceInfo data) {
-    return <String, dynamic>{
-      'name': data.name,
-      'systemName': data.systemName,
-      'systemVersion': data.systemVersion,
-      'model': data.model,
-      'localizedModel': data.localizedModel,
-      'identifierForVendor': data.identifierForVendor,
-      'isPhysicalDevice': data.isPhysicalDevice,
-      'utsname.sysname:': data.utsname.sysname,
-      'utsname.nodename:': data.utsname.nodename,
-      'utsname.release:': data.utsname.release,
-      'utsname.version:': data.utsname.version,
-      'utsname.machine:': data.utsname.machine,
-    };
-  }
-
-  String _deviceMAC = 'Click the button.';
-
-  static const _androidIdPlugin = AndroidId();
-  var _androidId = 'Unknown';
-
-  Future<void> _initAndroidId() async {
-    String androidId;
-    try {
-      androidId = await _androidIdPlugin.getId() ?? 'Unknown ID';
-    } on PlatformException {
-      androidId = 'Failed to get Android ID.';
+  void _validateInputs({bool isBiometricLogin = false}) {
+    final formState = _formKey.currentState;
+    if (formState == null) {
+      _fireToast('Terjadi kesalahan pada form', isError: true);
+      return;
     }
 
-    if (!mounted) return;
-
-    setState(() => _androidId = androidId);
-
-    print("android id : "+androidId);
-  }
-
-  Future<String?> _getId() async {
-
-    var deviceInfo = DeviceInfoPlugin();
-
-    if (Platform.isIOS) {
-
-      var iosDeviceInfo = await deviceInfo.iosInfo;
-      _androidId = iosDeviceInfo.identifierForVendor!;
-
-      return iosDeviceInfo.identifierForVendor; // unique ID on iOS
-
-    } else if(Platform.isAndroid) {
-
-      const _androidIdPlugin = AndroidId();
-      final String? androidId = await _androidIdPlugin.getId();
-      _androidId = _androidId;
-
-      return androidId;
+    if (!formState.validate()) {
+      return;
     }
 
+    formState.save();
+    context.read<LoginBloc>().add(
+          LoginSubmitted(
+            email: txtEditEmail.text.trim(),
+            password: txtEditPwd.text,
+            deviceId: _androidId,
+            isBiometricLogin: isBiometricLogin,
+          ),
+        );
   }
-
-  Future<void> doLogin(npp, password) async {
-
-    // var deviceiId = _getId();
-
-    final GlobalKey<State> _keyLoader = GlobalKey<State>();
-    Dialogs.loading(context, _keyLoader, "Proses...");
-
-    // // ==> Perubahan
-    // const _androidIdPlugin = AndroidId();
-    // final String? androidId = await _androidIdPlugin.getId();
-    // // <===
-    //
-    // print(
-    //     Platform.isAndroid
-    //         ? 'Android Device Info'
-    //         : Platform.isIOS
-    //         ? 'iOS Device Info'
-    //         : ''
-    // );
-
-    try {
-
-      //FETCH LOGIN
-      final response = await http.post(
-
-          Uri.parse(ApiConstants.BASE_URL+"/login"),
-          headers: {'Content-Type': 'application/json; charset=UTF-8'},
-          body: jsonEncode({
-            "npp": npp,
-            "password": password,
-            "device_id": _androidId
-          })
-      ).timeout( const Duration(seconds: 10));
-
-      print(jsonDecode(response.body));
-
-      final output = jsonDecode(response.body);
-
-      //FETCH KODE KANTOR
-      if (output['rcode'] == "00") {
-
-        final storage = const FlutterSecureStorage();
-        await storage.write(key: 'token', value: output['access_token']);
-        var token = await storage.read(key: 'token');
-        final getResult = await http.post(
-
-            Uri.parse(ApiConstants.BASE_URL+"/kantor"),
-            headers: <String, String> {
-              'Content-Type': 'application/json; charset=UTF-8',
-              'Authorization': 'Bearer $token'
-            },
-            body: jsonEncode(<String, String>{
-              'kode_kantor': output['kode_kantor'],
-              "npp": npp
-            })
-
-        ).timeout( const Duration(seconds: 10));
-
-        final output2 = jsonDecode(getResult.body);
-        print(output2['ket_bidang']);
-        print(output2['radius']);
-
-        if(output['rcode'] == '00') {
-
-          token = output['access_token'];
-          nama = output['nama'];
-          kode_kantor = output['kode_kantor'];
-          nama_kantor = output['nama_kantor'];
-          lat_kantor = double.parse(output2['latitude']) ;
-          long_kantor = double.parse(output2['longitude']);
-          radius = double.parse(output2['radius']);
-          deviceId = _androidId;
-          // ket_bidang = output['ket_bidang'];
-
-          Navigator.of(_keyLoader.currentContext!, rootNavigator: false).pop();
-
-          if (output['message'] == 'authenticated') {
-            saveSession(npp);
-          }
-
-        } else {
-
-          Navigator.of(_keyLoader.currentContext!, rootNavigator: false).pop();
-          Dialogs.popUp(context, output["message"].toString());
-        }
-
-      }else {
-
-          Navigator.of(_keyLoader.currentContext!, rootNavigator: false).pop();
-          Dialogs.popUp(context, output["message"].toString());
-      }
-    }
-
-    on TimeoutException catch (e) {
-
-      Navigator.of(_keyLoader.currentContext!, rootNavigator: false).pop();
-      Dialogs.popUp(context, 'Timeout' );
-
-    }}
-
-  saveSession(String npp) async {
-
-    SharedPreferences pref = await SharedPreferences.getInstance();
-
-    // Map<String, dynamic> payload = Jwt.parseJwt(token);
-    // DateTime? expiryDate = Jwt.getExpiryDate(token);
-
-    pref.setString("npp", npp);
-    pref.setString("nama", nama);
-    pref.setString("token", token);
-    pref.setString("kode_kantor", kode_kantor);
-    pref.setString("nama_kantor", nama_kantor);
-    // pref.setString("expired", expiryDate.toString());
-    pref.setBool("is_login", true);
-    pref.setDouble("lat_kantor", lat_kantor);
-    pref.setDouble("long_kantor", long_kantor);
-    pref.setDouble("radius", radius);
-    pref.setString("ket_bidang", ket_bidang);
-    pref.setString("device_id", _androidId);
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-          builder: (context) => MyMain()),
-    );
-  }
-
-  final textFieldFocusNode = FocusNode();
-  bool _obscured = false;
 
   void _toggleObscured() {
     setState(() {
-      _obscured = !_obscured;
-      if (textFieldFocusNode.hasPrimaryFocus) return; // If focus is on text field, dont unfocus
-      textFieldFocusNode.canRequestFocus = false;     // Prevents focus if tap on eye
+      _passwordVisible = !_passwordVisible;
+      if (textFieldFocusNode.hasPrimaryFocus) return;
+      textFieldFocusNode.canRequestFocus = false;
     });
+  }
+
+  Future<void> _authenticateWithBiometric() async {
+    print('Starting biometric authentication...');
+
+    try {
+      print('Checking biometric availability...');
+      final isBiometricAvailable =
+          await _biometricService.isBiometricAvailable();
+      print('Biometric available: $isBiometricAvailable');
+
+      if (!isBiometricAvailable) {
+        print('Biometric not available');
+        _fireToast(
+            'Please enable fingerprint authentication in your device settings');
+        return;
+      }
+
+      print('Getting stored credentials...');
+      final credentials = await _secureStorage.getCredentials();
+      if (credentials == null) {
+        print('No stored credentials found');
+        _fireToast('Please login manually first to enable fingerprint login');
+        return;
+      }
+
+      print('Attempting biometric authentication...');
+      final isAuthenticated = await _biometricService.authenticate();
+      print('Authentication result: $isAuthenticated');
+
+      if (!isAuthenticated) {
+        print('Authentication failed or was cancelled');
+        return; // Don't show toast here as the system will show its own dialog
+      }
+
+      if (!mounted) return;
+
+      print('Setting credentials and triggering login...');
+      setState(() {
+        txtEditEmail.text = credentials['email'] ?? '';
+        txtEditPwd.text = credentials['password'] ?? '';
+      });
+
+      // Small delay to ensure UI updates
+      await Future.delayed(Duration(milliseconds: 100));
+
+      if (!mounted) return;
+
+      // Trigger login with biometric flag
+      _validateInputs(isBiometricLogin: true);
+    } on PlatformException catch (e) {
+      print('Platform error during authentication: ${e.toString()}');
+      String message;
+      switch (e.code) {
+        case 'NotAvailable':
+          message =
+              'Fingerprint authentication is not available on this device';
+          break;
+        case 'NotEnrolled':
+          message =
+              'Please set up fingerprint authentication in your device settings';
+          break;
+        case 'LockedOut':
+        case 'PermanentlyLockedOut':
+          message = 'Too many attempts. Please try again later';
+          break;
+        default:
+          message = 'Authentication error. Please try again';
+      }
+      _fireToast(message);
+    } catch (e) {
+      print('Error during biometric authentication: $e');
+      _fireToast('Authentication error. Please try again');
+    }
+  }
+
+  Future<void> _handleSuccessfulLogin() async {
+    final email = txtEditEmail.text;
+    final password = txtEditPwd.text;
+
+    // Save credentials to SharedPreferences for settings page
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('email', email);
+    await prefs.setString('password', password);
+
+    // Verify token is stored
+    final storage = const FlutterSecureStorage();
+    final token = await storage.read(key: 'auth_token');
+    print('\n=== Token Check After Login ===');
+    print('Token present: ${token != null}');
+    if (token == null) {
+      print('Warning: Token not found after login!');
+      print('Checking all stored items:');
+      final allItems = await storage.readAll();
+      print('All stored items: $allItems');
+    } else {
+      print('Token found with length: ${token.length}');
+    }
+
+    // If biometric is enabled, check if we need to update credentials
+    final isBiometricEnabled = await _secureStorage.isBiometricEnabled();
+    if (isBiometricEnabled) {
+      final currentCredentials = await _secureStorage.getCredentials();
+      final isNewUser = currentCredentials == null || 
+                       currentCredentials['email'] != email;
+      
+      if (isNewUser) {
+        print('Updating biometric credentials for new user');
+        await _secureStorage.saveCredentials(email, password);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Login biometric telah diperbarui'),
+              backgroundColor: Color.fromRGBO(1, 101, 65, 1),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(10)),
+              ),
+              margin: EdgeInsets.all(10),
+            ),
+          );
+        }
+      } else {
+        // Still save credentials but don't show message
+        await _secureStorage.saveCredentials(email, password);
+      }
+    }
+
+    // Only show biometric prompt on fresh install
+    if (mounted) {
+      final isInitialized = await _secureStorage.isAppInitialized();
+      final isEnabled = await _secureStorage.isBiometricEnabled();
+      final isBiometricAvailable =
+          await _biometricService.isBiometricAvailable();
+      final biometrics = await _biometricService.getAvailableBiometrics();
+
+      print('Login check:');
+      print('- App initialized: $isInitialized');
+      print('- Biometric enabled: $isEnabled');
+      print('- Biometric available: $isBiometricAvailable');
+      print('- Has biometrics: ${biometrics.isNotEmpty}');
+
+      // Only show prompt if:
+      // 1. App is not initialized (fresh install)
+      // 2. Biometric is available and not already enabled
+      if (!isInitialized &&
+          !isEnabled &&
+          isBiometricAvailable &&
+          biometrics.isNotEmpty) {
+        // Show prompt to enable biometric
+        final shouldEnable = await showDialog<bool>(
+              context: context,
+              barrierDismissible: false,
+              builder: (BuildContext context) {
+                return AlertDialog(
+                  title: const Text('Aktifkan Login Biometric'),
+                  content: const Text(
+                      'Perangkat Anda mendukung login dengan Biometric. '
+                      'Apakah Anda ingin mengaktifkan fitur ini untuk login lebih cepat?'),
+                  actions: <Widget>[
+                    TextButton(
+                      child: const Text('Tidak'),
+                      onPressed: () => Navigator.of(context).pop(false),
+                    ),
+                    TextButton(
+                      child: const Text(
+                        'Aktifkan',
+                        style: TextStyle(
+                          color: Color.fromRGBO(1, 101, 65, 1),
+                        ),
+                      ),
+                      onPressed: () => Navigator.of(context).pop(true),
+                    ),
+                  ],
+                );
+              },
+            ) ??
+            false;
+
+        if (shouldEnable) {
+          await _secureStorage.setBiometricEnabled(true);
+          await _secureStorage.saveCredentials(email, password);
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Login sidik jari telah diaktifkan'),
+                backgroundColor: Color.fromRGBO(1, 101, 65, 1),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(10)),
+                ),
+                margin: EdgeInsets.all(10),
+              ),
+            );
+          }
+        }
+      }
+    }
+
+    // Navigate to main layout
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const MainLayout(),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-
-    return Scaffold(
-        resizeToAvoidBottomInset: false,
-        body: Container(
-            height: MediaQuery.of(context).size.height,
-            width: MediaQuery.of(context).size.width,
-            color: Colors.white,
-            child: Form(
+    return BlocListener<LoginBloc, LoginState>(
+      listener: (context, state) {
+        if (state is LoginLoading) {
+          print('Login loading state');
+          Dialogs.loading(context, GlobalKey<State>(), "Proses...");
+        } else if (state is LoginSuccess) {
+          print('Login success state');
+          // Handle the loading dialog dismissal safely
+          if (Navigator.canPop(context)) {
+            Navigator.of(context, rootNavigator: true).pop();
+          }
+          _handleSuccessfulLogin();
+        } else if (state is LoginFailure) {
+          print('Login failure state: ${state.error}');
+          if (Navigator.canPop(context)) {
+            Navigator.of(context, rootNavigator: true).pop();
+          }
+          _fireToast(state.error);
+        } else if (state is LoginLocationError) {
+          print('Login location error state: ${state.error}');
+          _showDialogWarning(state.error);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Form(
                 key: _formKey,
                 child: Column(
-                    children: [
-                      /// Login & Welcome back
-                      Container(
-                        height: 210,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 35),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children:  [
-                            Image(image: AssetImage("assets/images/Logo_Bank_Aceh_Syariah.png"),height: 50),
-                            SizedBox(height: 21.5),
-                            /// LOGIN TEXT
-                            Center(
-                              child:
-                              RichText(
-                                text: TextSpan(
-                                  // text: 'Hello ',
-                                  style: TextStyle(fontSize: 19),
-                                  children: <TextSpan>[
-                                    TextSpan(text: 'HADIR BANK ACEH ', style: TextStyle(fontWeight: FontWeight.bold,color: Color.fromRGBO(1, 101, 65, 1))),
-                                    // TextSpan(text: 'MOBILE',style: TextStyle(fontWeight: FontWeight.bold,color:Color.fromRGBO(1, 101, 65, 1))),
-                                    // TextSpan(text: 'APLIKASI HADIR BANK ACEH',style: TextStyle(fontWeight: FontWeight.bold,color:Color.fromRGBO(1, 101, 65, 1))),
-                                  ],
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 60),
+                    // Logo
+                    Center(
+                      child: Container(
+                        width: 90,
+                        height: 90,
+                        decoration: BoxDecoration(
+                          // color: Color.fromRGBO(1, 101, 65, 1),
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Image.asset("assets/images/ic_launcher.png",
+                            height: 50),
+                      ),
+                    ),
+                    const SizedBox(height: 40),
+                    // Welcome Text
+                    RichText(
+                      text: TextSpan(
+                        style: TextStyle(
+                          fontSize: 30,
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black,
+                          height: 1.2,
+                        ),
+                        children: [
+                          TextSpan(text: 'Selamat Datang '),
+                          TextSpan(text: '👋'),
+                          TextSpan(text: '\ndi '),
+                          TextSpan(
+                            text: 'Hadir Bank Aceh',
+                            style: TextStyle(
+                              color: Color.fromRGBO(1, 101, 65, 1),
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Silahkan masuk untuk melanjutkan',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontFamily: 'Poppins',
+                        color: Colors.grey[500],
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                    const SizedBox(height: 40),
+                    // Email Field
+                    Container(
+                      height: 65,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Color.fromRGBO(1, 101, 65, 0.3),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: TextFormField(
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Colors.black87,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'NPP',
+                          hintStyle: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 16,
+                          ),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          errorBorder: InputBorder.none,
+                          focusedErrorBorder: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 25,
+                            vertical: 20,
+                          ),
+                          prefixIcon: Padding(
+                            padding: EdgeInsets.only(left: 15, right: 10),
+                            child: Icon(
+                              Icons.person_outline_rounded,
+                              color: Color.fromRGBO(1, 101, 65, 1),
+                              size: 24,
+                            ),
+                          ),
+                          prefixIconConstraints: BoxConstraints(
+                            minWidth: 25,
+                            minHeight: 25,
+                          ),
+                        ),
+                        controller: txtEditEmail,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'NPP tidak boleh kosong';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Password Field
+                    Container(
+                      height: 65,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Color.fromRGBO(1, 101, 65, 0.3),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: TextFormField(
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Colors.black87,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Kata Sandi',
+                          hintStyle: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 16,
+                          ),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          errorBorder: InputBorder.none,
+                          focusedErrorBorder: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 25,
+                            vertical: 20,
+                          ),
+                          prefixIcon: Padding(
+                            padding: EdgeInsets.only(left: 15, right: 10),
+                            child: Icon(
+                              Icons.lock_outline_rounded,
+                              color: Color.fromRGBO(1, 101, 65, 1),
+                              size: 24,
+                            ),
+                          ),
+                          prefixIconConstraints: BoxConstraints(
+                            minWidth: 25,
+                            minHeight: 25,
+                          ),
+                          suffixIcon: Padding(
+                            padding: EdgeInsets.only(right: 10),
+                            child: IconButton(
+                              icon: Icon(
+                                _passwordVisible
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                                color: Color.fromRGBO(1, 101, 65, 1),
+                                size: 24,
+                              ),
+                              onPressed: _toggleObscured,
+                            ),
+                          ),
+                        ),
+                        controller: txtEditPwd,
+                        obscureText: !_passwordVisible,
+                        enableSuggestions: false,
+                        autocorrect: false,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Kata sandi tidak boleh kosong';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Forgot Password
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () {
+                          showGeneralDialog(
+                            context: context,
+                            pageBuilder: (context, animation1, animation2) =>
+                                Container(),
+                            transitionBuilder:
+                                (context, animation1, animation2, child) {
+                              return Transform.scale(
+                                scale: Curves.easeInOut
+                                    .transform(animation1.value),
+                                child: Dialog(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  elevation: 0,
+                                  backgroundColor: Colors.transparent,
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeInOut,
+                                    padding: const EdgeInsets.all(20),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(20),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.1),
+                                          spreadRadius: 5,
+                                          blurRadius: 15,
+                                          offset: const Offset(0, 3),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Hero(
+                                          tag: 'forgotPasswordIcon',
+                                          child: Container(
+                                            width: 70,
+                                            height: 70,
+                                            decoration: BoxDecoration(
+                                              color: const Color.fromRGBO(
+                                                  1, 101, 65, 0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(35),
+                                            ),
+                                            child: const Icon(
+                                              Icons.lock_reset_rounded,
+                                              size: 35,
+                                              color:
+                                                  Color.fromRGBO(1, 101, 65, 1),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 20),
+                                        const Text(
+                                          'Lupa Kata Sandi?',
+                                          style: TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 15),
+                                        const Text(
+                                          'Untuk mengatur ulang kata sandi, silakan hubungi administrator Bank Aceh Syariah atau kunjungi kantor cabang terdekat.',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.black54,
+                                            height: 1.5,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 25),
+                                        SizedBox(
+                                          width: double.infinity,
+                                          height: 45,
+                                          child: ElevatedButton(
+                                            onPressed: () {
+                                              Navigator.of(context).pop();
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor:
+                                                  const Color.fromRGBO(
+                                                      1, 101, 65, 1),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                              elevation: 0,
+                                            ),
+                                            child: const Text(
+                                              'Mengerti',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                            transitionDuration:
+                                const Duration(milliseconds: 300),
+                          );
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color.fromRGBO(1, 101, 65, 1),
+                          padding: const EdgeInsets.symmetric(horizontal: 25.0),
+                        ),
+                        child: const Text(
+                          'Lupa Kata Sandi?',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    // Login Buttons Column
+                    Column(
+                      children: [
+                        // Regular login button
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: ElevatedButton(
+                            onPressed: _validateInputs,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Color.fromRGBO(1, 101, 65, 1),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: Text(
+                              'Masuk',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Fingerprint button (if available)
+                        if (_showBiometricButton) ...[
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: OutlinedButton.icon(
+                              onPressed: _authenticateWithBiometric,
+                              icon: const Icon(
+                                Icons.fingerprint,
+                                size: 24,
+                                color: Color.fromRGBO(1, 101, 65, 1),
+                              ),
+                              label: const Text(
+                                'Masuk dengan Biometric',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color.fromRGBO(1, 101, 65, 1),
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(
+                                  color: Color.fromRGBO(1, 101, 65, 1),
+                                  width: 1.5,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
                                 ),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        flex: 3,
-                        child: Container(
-                          width: MediaQuery.of(context).size.width,
-                          decoration: const BoxDecoration(
-                            // color: Colors.white,
-                            color: Color.fromRGBO(1, 101, 65, 1),
-                            borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(35),
-                              topRight: Radius.circular(35),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    // Register Text
+                    Center(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text(
+                            'Belum punya akun?',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.black54,
                             ),
                           ),
-                          child: SingleChildScrollView(
-                            child:
-                            Column(
-                              children: [
-                                const SizedBox(height: 20),
-                                /// Text Fields
-                                Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 15),
-                                  width: MediaQuery.of(context).size.width,
-                                  child:
-                                  Column(
-
-                                    mainAxisAlignment: MainAxisAlignment.start,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Padding(
-                                          padding: EdgeInsets.fromLTRB(10, 10, 10, 0),
-                                          child: Text("NRK",style: TextStyle(color: Colors.white,fontWeight: FontWeight.w500)),
+                          TextButton(
+                            onPressed: () {
+                              showGeneralDialog(
+                                context: context,
+                                pageBuilder:
+                                    (context, animation1, animation2) =>
+                                        Container(),
+                                transitionBuilder:
+                                    (context, animation1, animation2, child) {
+                                  return Transform.scale(
+                                    scale: Curves.easeInOut
+                                        .transform(animation1.value),
+                                    child: Dialog(
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(20),
                                       ),
-                                      Padding (
-                                          padding: EdgeInsets.fromLTRB(10, 4, 10, 0),
-                                          child: TextFormField(
-                                            style: TextStyle(fontSize: 14),
-                                            decoration: InputDecoration (
-                                              contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                                              hintText: '',
-                                              fillColor: Colors.white,
-                                              filled: true,
-                                              border: OutlineInputBorder(
-                                                borderRadius: BorderRadius.circular(11.0),
-                                              ),
-                                              focusedBorder:OutlineInputBorder(
-                                                borderSide: const BorderSide(color: Colors.white, width: 2.0),
-                                                borderRadius: BorderRadius.circular(11.0),
-                                              ),
-                                              isCollapsed: false,
-                                              hintStyle: TextStyle(fontSize: 14, color: Colors.grey),
-                                              prefixIcon: Icon(Icons.person),
-                                                prefixIconColor: MaterialStateColor.resolveWith((states) =>
-                                                states.contains(MaterialState.focused)
-                                                    ? Colors.black
-                                                    : Colors.grey)
+                                      elevation: 0,
+                                      backgroundColor: Colors.transparent,
+                                      child: AnimatedContainer(
+                                        duration:
+                                            const Duration(milliseconds: 300),
+                                        curve: Curves.easeInOut,
+                                        padding: const EdgeInsets.all(20),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color:
+                                                  Colors.black.withOpacity(0.1),
+                                              spreadRadius: 5,
+                                              blurRadius: 15,
+                                              offset: const Offset(0, 3),
                                             ),
-                                            controller: txtEditEmail,
-                                          ),
-                                      ),
-                                      Padding(
-                                        padding: EdgeInsets.fromLTRB(10, 10, 10, 0),
-                                        child: Text("Password",style: TextStyle(color: Colors.white,fontWeight: FontWeight.w500)),
-                                      ),
-                                      Padding (
-                                        padding: EdgeInsets.fromLTRB(10, 4, 10, 10),
-                                          child: TextFormField(
-                                            decoration: InputDecoration(
-                                                contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                                                hintText: '',
-                                                fillColor: Colors.white,
-                                                filled: true,
-                                                border: OutlineInputBorder(
-                                                  borderRadius: BorderRadius.circular(11.0),
+                                          ],
+                                        ),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Hero(
+                                              tag: 'registerIcon',
+                                              child: Container(
+                                                width: 70,
+                                                height: 70,
+                                                decoration: BoxDecoration(
+                                                  color: const Color.fromRGBO(
+                                                      1, 101, 65, 0.1),
+                                                  borderRadius:
+                                                      BorderRadius.circular(35),
                                                 ),
-                                                focusedBorder:OutlineInputBorder(
-                                                  borderSide: const BorderSide(color: Colors.white, width: 2.0),
-                                                  borderRadius: BorderRadius.circular(11.0),
+                                                child: const Icon(
+                                                  Icons.person_add_rounded,
+                                                  size: 35,
+                                                  color: Color.fromRGBO(
+                                                      1, 101, 65, 1),
                                                 ),
-                                                isCollapsed: false,
-                                                hintStyle: TextStyle(fontSize: 14, color: Colors.black),
-                                                prefixIcon: Icon(Icons.lock_rounded, size: 22,),
-                                                prefixIconColor: Colors.grey,
-                                                suffixIcon: IconButton(
-                                                  color: Colors.grey.withOpacity(0.5),
-                                                    icon: Icon(
-                                                      size: 22,
-                                                      _passwordVisible
-                                                          ? Icons.visibility
-                                                          : Icons.visibility_off,
-
-                                                    ),
-                                                  onPressed: () {
-                                                      setState(() {
-                                                        _passwordVisible = !_passwordVisible;
-                                                      });
-                                                  },
-                                                )
+                                              ),
                                             ),
-                                            controller: txtEditPwd,
-                                            onSaved: (String? val) {
-                                              txtEditPwd.text = val!;
-                                            },
-                                            obscureText: !_passwordVisible,
-                                            enableSuggestions: false,
-                                            autocorrect: false,
-                                            validator: (String? arg) {
-                                              if (arg == null || arg.isEmpty) {
-                                                return 'Password tidak boleh kosong!';
-                                              } else {
-                                                return null;
-                                              }
-                                            },
-                                          ),
-                                      )
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 60),
-                                /// LOGIN BUTTON
-                                Container(
-                                    margin: const EdgeInsets.symmetric(horizontal: 25),
-                                    height: 50,
-                                    width: MediaQuery.of(context).size.width,
-                                    child:
-                                      ElevatedButton(
-                                        child: const Text('Log in', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900,color:Color.fromRGBO(1, 101, 65, 1)),),
-                                        style: ButtonStyle(
-                                            backgroundColor: MaterialStateProperty.all<Color>(Colors.white),
-                                            shape: MaterialStateProperty.all<RoundedRectangleBorder>(
-                                                RoundedRectangleBorder(
-                                                  borderRadius: BorderRadius.circular(10.0),
-                                                )
+                                            const SizedBox(height: 20),
+                                            const Text(
+                                              'Daftar Akun Baru',
+                                              style: TextStyle(
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.black87,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 15),
+                                            const Text(
+                                              'Untuk mendaftar akun baru, silakan kunjungi kantor Bank Aceh Syariah terdekat dengan membawa kartu identitas yang masih berlaku.',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                color: Colors.black54,
+                                                height: 1.5,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 25),
+                                            SizedBox(
+                                              width: double.infinity,
+                                              height: 45,
+                                              child: ElevatedButton(
+                                                onPressed: () {
+                                                  Navigator.of(context).pop();
+                                                },
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor:
+                                                      const Color.fromRGBO(
+                                                          1, 101, 65, 1),
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            12),
+                                                  ),
+                                                  elevation: 0,
+                                                ),
+                                                child: const Text(
+                                                  'Mengerti',
+                                                  style: TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                        ),
-                                        onPressed: () => {
-                                          _validateInputs(),
-                                        } ,
-                                      )
-                                ),
-                                const SizedBox(height: 50),
-                                Text(
-                                  "Version 1.0",
-                                  style: TextStyle(color: Colors.white,fontSize: 12),
-                                )
-                              ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                                transitionDuration:
+                                    const Duration(milliseconds: 300),
+                              );
+                            },
+                            style: TextButton.styleFrom(
+                              foregroundColor:
+                                  const Color.fromRGBO(1, 101, 65, 1),
+                              padding: EdgeInsets.zero,
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text(
+                              ' Daftar',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                    ])
-              )
-          )
-      );
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

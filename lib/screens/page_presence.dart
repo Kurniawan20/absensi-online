@@ -1,22 +1,31 @@
+import 'dart:math' show min;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:device_info/device_info.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
-import 'package:monitoring_project/controller/PresenceController.dart';
 import 'package:monitoring_project/screens/Apis.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import './page_login.dart';
+import './home_page.dart';
+import './page_rekap_absensi.dart';
+import './page_profile.dart';
 import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platform_interface.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import '../widgets/custom_alert.dart';
+import '../services/attendance_service.dart';
 
 void main() => runApp(const Presence());
 
@@ -28,7 +37,6 @@ class Presence extends StatefulWidget {
 }
 
 class _PresenceState extends State<Presence> {
-
   bool _isMockLocation = false;
   bool? _jailbroken;
   bool? _developerMode;
@@ -40,9 +48,10 @@ class _PresenceState extends State<Presence> {
   double radius = 0;
   double zoomVar = 17;
 
-  double latKantor2 = 5.543605637891148;
-  double longKantor2 = 95.32992029020498;
-  static LatLng _initialPosition = LatLng(5.543605637891148, 95.32992029020498);
+  double latKantor2 = 0;
+  double longKantor2 = 0;
+  double radius2 = 0;
+  bool useSecondLocation = false;
 
   bool isJailBroken = false;
   bool canMockLocation = false;
@@ -50,25 +59,51 @@ class _PresenceState extends State<Presence> {
   bool isOnExternalStorage = false;
   bool isSafeDevice = false;
   bool isDevelopmentModeEnable = false;
-  LatLng currentLatLng = LatLng(5.543605637891148, 95.32992029020498) ;
+  LatLng currentLatLng = LatLng(5.543605637891148, 95.32992029020498);
 
-  void initState(){
+  String? _selectedOption;
+  bool _isSwipeEnabled = false;
+  double _slideValue = 0.0;
+  bool _isSliding = false;
 
+  Timer? _timer;
+  String _currentTime = '';
+  String? _jamMasuk;
+  String? _jamPulang;
+
+  final _attendanceService = AttendanceService();
+
+  void initState() {
     super.initState();
+    initializeDateFormatting('id', null);
 
-    getUserCurrentLocation();
+    _timer = Timer.periodic(Duration(minutes: 1), (timer) => _updateTime());
     initializePreference().then((result) {
+      if (!mounted) return;
+      setState(() {});
+    });
+
+    getUserCurrentLocation().then((currLocation) {
+      if (!mounted) return;
       setState(() {
+        currentLatLng = LatLng(currLocation.latitude, currLocation.longitude);
+        if (_controller.isCompleted) {
+          _controller.future.then((controller) {
+            if (!mounted) return;
+            controller.animateCamera(
+              CameraUpdate.newCameraPosition(
+                CameraPosition(
+                  target: currentLatLng,
+                  zoom: zoomVar,
+                ),
+              ),
+            );
+          });
+        }
       });
     });
 
-    Geolocator.getCurrentPosition().then((currLocation){
-      setState((){
-        currentLatLng = new LatLng(currLocation.latitude, currLocation.longitude);
-      });
-    });
-
-    print(currentLatLng);
+    _loadAttendanceData();
   }
 
   Future<void> initializePreference() async {
@@ -79,17 +114,26 @@ class _PresenceState extends State<Presence> {
     longKantor = prefs.getDouble("long_kantor")!;
     radius = prefs.getDouble("radius")!;
 
-    latKantor2 = prefs.getDouble("lat_kantor")!;
-    longKantor2 = prefs.getDouble("long_kantor")!;
+    String? kodeKantor = prefs.getString("kode_kantor");
+    if (kodeKantor == "813") {
+      latKantor2 = 5.521261515723264;
+      longKantor2 = 95.3300600393016;
+      radius2 = radius;
+      useSecondLocation = true;
+    } else if (kodeKantor != null && kodeKantor.startsWith("8")) {
+      latKantor2 = 5.544926358826539;
+      longKantor2 = 95.31200258268379;
+      radius2 = radius;
+      useSecondLocation = true;
+    }
 
-    setState(() {
-    });
+    if (!mounted) return;
+    setState(() {});
   }
 
   Completer<GoogleMapController> _controller = Completer();
 
   Future<Position> getUserCurrentLocation() async {
-
     bool serviceEnabled;
     LocationPermission permission;
 
@@ -102,562 +146,1300 @@ class _PresenceState extends State<Presence> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        _fetchDialogWarning(context, "Mohon izikan akses lokasi untuk melakukan absensi");
+        showDialog(
+          context: context,
+          builder: (context) => CustomAlert(
+            title: 'Peringatan',
+            message: 'Mohon izikan akses lokasi untuk melakukan absensi',
+            icon: Icons.warning_amber_rounded,
+            iconColor: Colors.red,
+          ),
+        );
         return Future.error('Location permissions are denied');
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
       // Permissions are denied forever, handle appropriately.
-      _fetchDialogWarning(context, "Mohon izikan akses lokasi untuk melakukan absensi");
-      return Future.error('Location permissions are permanently denied, we cannot request permissions.');
+      showDialog(
+        context: context,
+        builder: (context) => CustomAlert(
+          title: 'Peringatan',
+          message: 'Mohon izikan akses lokasi untuk melakukan absensi',
+          icon: Icons.warning_amber_rounded,
+          iconColor: Colors.red,
+        ),
+      );
+      return Future.error(
+          'Location permissions are permanently denied, we cannot request permissions.');
     }
 
     return await Geolocator.getCurrentPosition();
   }
 
   late GoogleMapController mapController;
-  GeolocatorPlatform _geo = new PresenceGeo( );
+  GeolocatorPlatform _geo = new PresenceGeo();
   bool _inRadius = true;
 
-
-
-  void _checkRadius(String absenType) async {
-
-      getUserCurrentLocation().then((value) async {
-
-      final double distance = _geo.distanceBetween(
-        latKantor, longKantor,
-        value.latitude,
-        value.longitude,
+  void _checkRadius(String type) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => CustomLoadingAlert(
+          message: type == 'absenmasuk'
+              ? 'Memproses Absen Masuk'
+              : 'Memproses Absen Pulang',
+        ),
       );
 
-      setState(() {
-        this._inRadius = distance < radius;
-      });
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
 
-      _absen(value.latitude, value.longitude, absenType);
+      double distanceInMeters = Geolocator.distanceBetween(
+        position.latitude,
+        position.longitude,
+        latKantor,
+        longKantor,
+      );
 
-    });
+      if (useSecondLocation) {
+        double distanceToSecondOffice = Geolocator.distanceBetween(
+          position.latitude,
+          position.longitude,
+          latKantor2,
+          longKantor2,
+        );
+        distanceInMeters = min(distanceInMeters, distanceToSecondOffice);
+      }
+
+      if (distanceInMeters <= radius) {
+        _absen(position.latitude, position.longitude, type);
+      } else {
+        Navigator.of(context, rootNavigator: true).pop();
+        showDialog(
+          context: context,
+          builder: (context) => CustomAlert(
+            title: 'Lokasi Invalid',
+            message: 'Anda berada di luar area kantor',
+            icon: Icons.location_off,
+            iconColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      Navigator.of(context, rootNavigator: true).pop();
+      showDialog(
+        context: context,
+        builder: (context) => CustomAlert(
+          title: 'Gagal',
+          message: 'Terjadi kesalahan. Silahkan coba lagi.',
+          icon: Icons.error_outline,
+          iconColor: Colors.red,
+        ),
+      );
+    }
   }
-
-  Set<Circle> circles = Set.from([Circle(
-      circleId: CircleId("2343"),
-      center: LatLng(5.543577914626673, 95.31220741678517),
-      radius: 100,
-      fillColor: Colors.orange.shade100.withOpacity(0.5),
-      strokeColor:  Colors.orange.shade100.withOpacity(0.1)
-  )]);
-
-  final ButtonStyle raisedButtonStyle = ElevatedButton.styleFrom(
-    foregroundColor: Colors.white,
-    backgroundColor: Colors.blueAccent[300],
-    minimumSize: Size(10, 36),
-
-    padding: EdgeInsets.symmetric(horizontal: 10),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.all(Radius.circular(2)),
-    ),
-  );
 
   void _fetchData(BuildContext context, [bool mounted = true]) async {
-    QuickAlert.show(
-      barrierDismissible: false,
-      context: context,
-      type: QuickAlertType.loading,
-      title: 'Mohon Tunggu',
-      text:  'Sedang memproses absensi..',
-
-    );
+    // Removed duplicate loading dialog since it's now shown in _checkRadius
   }
 
-  void _fetchDialog(BuildContext context, String message, [bool mounted = true]) async {
-    // show the loading dialog
+  void _fetchDialog(BuildContext context, String message,
+      [bool mounted = true]) async {
     showDialog(
-      // The user CANNOT close this dialog  by pressing outsite it
-        barrierDismissible: false,
-        context: context,
-        builder: (BuildContext context) => AlertDialog(
-          backgroundColor: Colors.white,
-            title: const Text('Berhasil',style: TextStyle(color: Colors.black87),),
-            content: Text(message),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Navigator.pop(context, 'OK'),
-                child: const Text('OK',style: TextStyle(color: Colors.black87)),
-              ),
-            ],
-          ),
-    );
-  }
-
-  void _fetchDialogWarning(BuildContext context, String message, [bool mounted = true]) async {
-
-    QuickAlert.show(
       context: context,
-      type: QuickAlertType.error,
-      title: "Oops...",
-      text: message,
-      confirmBtnColor : Color.fromRGBO(1, 101, 65, 1),
-      confirmBtnText: 'Oke',
-    );
-  }
-
-  void _konfirmasiAbsenPulang(BuildContext context, String message, [bool mounted = true]) async {
-    // show the loading dialog
-    showDialog(
-      // The user CANNOT close this dialog  by pressing outsite it
-      barrierDismissible: false,
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        backgroundColor: Colors.white,
-        title: const Text('Konfirmasi Absensi',style: TextStyle(color: Colors.black,fontWeight:FontWeight.bold),),
-        content: Text("Apakah anda yakin akan melakukan absen pulang?"),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(context, 'Batal'),
-            child: const Text('Batal',style: TextStyle(color: Colors.black,fontSize: 12)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Color.fromRGBO(1, 101, 65, 1),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.all(10.0),
-              textStyle: const TextStyle(fontSize: 10),
-            ),
-            onPressed: () {
-              Navigator.of(context,rootNavigator: true).pop(context);
-              _checkRadius('absenpulang');
-              _fetchData(context);
-            },
-            child: const Text('Pulang'),
-          ),
-        ],
+      builder: (context) => CustomAlert(
+        title: 'Berhasil',
+        message: message,
+        icon: Icons.check_circle_outline,
+        iconColor: Color.fromRGBO(1, 101, 65, 1),
       ),
     );
+  }
 
+  void _fetchDialogWarning(BuildContext context, String message,
+      [bool mounted = true]) async {
+    showDialog(
+      context: context,
+      builder: (context) => CustomAlert(
+        title: 'Peringatan',
+        message: message,
+        icon: Icons.warning_amber_rounded,
+        iconColor: Colors.red,
+      ),
+    );
+  }
+
+  void _konfirmasiAbsenPulang(BuildContext context, String message,
+      [bool mounted = true]) async {
+    showDialog(
+      context: context,
+      builder: (context) => CustomConfirmAlert(
+        title: 'Konfirmasi',
+        message: 'Apakah anda yakin akan melakukan absen pulang?',
+        onConfirm: () {
+          Navigator.pop(context); // Close confirmation dialog
+          _fetchDialog(
+              context, 'Sedang memproses absen pulang...'); // Show loading
+          _checkRadius('absenpulang');
+        },
+      ),
+    );
   }
 
   Future<String> _absen(double lat, double long, String absenType) async {
-
     final prefs = await SharedPreferences.getInstance();
     final branch_id = prefs.getString("kode_kantor").toString();
     final nrk = prefs.getString("npp");
     final _deviceId = prefs.getString("device_id");
 
-    bool jailbroken;
-    bool developerMode;
-
-      // if (Platform.isAndroid) {
-      //
-      //   AndroidDeviceInfo deviceInfo = await DeviceInfoPlugin().androidInfo;
-      //
-      // } else {
-      //
-      //   IosDeviceInfo deviceInfo = await DeviceInfoPlugin().iosInfo;
-      //
-      // }
-
-    var deviceInfo = DeviceInfoPlugin();
-    bool isPhysicalDevice = false;
-
-    if (Platform.isIOS) {
-
-      var iosDeviceInfo = await deviceInfo.iosInfo;
-      isPhysicalDevice = iosDeviceInfo.isPhysicalDevice!;
-
-    } else if(Platform.isAndroid) {
-
-      var androidDeviceInfo = await deviceInfo.androidInfo;
-      isPhysicalDevice = androidDeviceInfo.isPhysicalDevice!;
-
-    }
+    print('=== Starting attendance process ===');
+    print('Type: $absenType');
+    print('Location: lat=$lat, long=$long');
+    print('Branch ID: $branch_id');
+    print('NRK: $nrk');
+    print('Device ID: $_deviceId');
 
     try {
-      jailbroken = await FlutterJailbreakDetection.jailbroken;
-      developerMode = await FlutterJailbreakDetection.developerMode;
-    } on PlatformException {
-      jailbroken = true;
-      developerMode = true;
-    }
-
-    _jailbroken = jailbroken;
-    _developerMode = developerMode;
-    print("DEVELOPER MODE ${_developerMode}");
-    print("JAILBREAK MODE ${_jailbroken}");
-
-    if(_developerMode == true) {
-
-      var message = "Mohon matikan developer mode anda!";
-
-      Navigator.of(context,rootNavigator: true).pop(context);
-
-      QuickAlert.show(
-        context: context,
-        type: QuickAlertType.warning,
-        title: "Warning",
-        text: message,
-        confirmBtnColor : Color.fromRGBO(1, 101, 65, 1),
-        confirmBtnText: 'Oke',
-      );
-
-      return "absen gagal";
-
-    }
-
-    else if(isPhysicalDevice == false) {
-
-      var message = "Anda terdeteksi menggunakan emulator!";
-
-      Navigator.of(context,rootNavigator: true).pop(context);
-
-      QuickAlert.show(
-        context: context,
-        type: QuickAlertType.warning,
-        title: "Warning",
-        text: message,
-        confirmBtnColor : Color.fromRGBO(1, 101, 65, 1),
-        confirmBtnText: 'Oke',
-      );
-
-      return "absen gagal";
-    }
-
-    try {
-
       final storage = const FlutterSecureStorage();
-      var token = await storage.read(key: 'token');
+      var token = await storage.read(key: 'auth_token');
 
-      final getResult = await http.post(
-          Uri.parse(ApiConstants.BASE_URL+"/checksession"),
-          headers: <String, String> {
-            'Content-Type': 'application/json; charset=UTF-8',
-            'Authorization': 'Bearer $token'
-          },
-          body: jsonEncode(<String, String>{
-            'npp': nrk.toString(),
-            "deviceId": _deviceId.toString(),
-          })
-      ).timeout(const Duration(seconds: 20));
+      print('\n=== Token Check ===');
+      print('Raw token: ${token ?? "null"}');
 
-      final result = getResult.body.toString().replaceAll('""', "");
+      if (token == null) {
+        print('Token is null, checking all stored items:');
+        final allItems = await storage.readAll();
+        print('All stored items: $allItems');
 
-      if (jsonDecode(result)['rcode'] == "00") {
+        Navigator.of(context, rootNavigator: true).pop(context);
+        showDialog(
+          context: context,
+          builder: (context) => CustomAlert(
+            title: "Session Expired",
+            message: "Sesi anda telah berakhir. Silakan login kembali.",
+            icon: Icons.warning_amber_rounded,
+            iconColor: Colors.red,
+          ),
+        );
+
+        // Redirect to login
+        Future.delayed(Duration(seconds: 2), () {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => Login()),
+            (route) => false,
+          );
+        });
+
+        return "token expired";
+      }
+
+      print('\n=== Making check session request ===');
+      print('URL: ${ApiConstants.BASE_URL}/checksession');
+      print(
+          'Headers: Authorization: Bearer ${token.substring(0, min(10, token.length))}...');
+      print('Body: {"npp": "$nrk", "deviceId": "$_deviceId"}');
+
+      final checkSessionResult = await http
+          .post(Uri.parse(ApiConstants.BASE_URL + "/checksession"),
+              headers: <String, String>{
+                'Content-Type': 'application/json; charset=UTF-8',
+                'Authorization': 'Bearer $token'
+              },
+              body: jsonEncode(<String, String>{
+                'npp': nrk.toString(),
+                "deviceId": _deviceId.toString(),
+              }))
+          .timeout(const Duration(seconds: 20));
+
+      print('Check session response status: ${checkSessionResult.statusCode}');
+      print('Check session response body: ${checkSessionResult.body}');
+
+      if (checkSessionResult.statusCode != 200) {
+        print(
+            'Check session failed with status: ${checkSessionResult.statusCode}');
+        throw Exception('Check session failed');
+      }
+
+      final checkSessionData =
+          jsonDecode(checkSessionResult.body.toString().replaceAll('""', ""));
+
+      if (checkSessionData['rcode'] == "00") {
+        // Verify token is still valid after check session
+        token = await storage.read(key: 'auth_token');
+        if (token == null) {
+          throw Exception('Token lost after check session');
+        }
         if (this._inRadius) {
           try {
-            final getResult = await http.post(
-                Uri.parse(ApiConstants.BASE_URL+"/"+absenType),
-                headers: <String, String> {
-                  'Content-Type': 'application/json; charset=UTF-8',
-                  'Authorization': 'Bearer $token'
-                },
-                body: jsonEncode(<String, String> {
-                  'npp': nrk.toString(),
-                  'latitude': lat.toString(),
-                  'longitude': long.toString(),
-                  'branch_id': branch_id
-                })
-            ).timeout(const Duration(seconds: 20));
+            print('\n=== Making attendance request ===');
+            print('URL: ${ApiConstants.BASE_URL}/$absenType');
+            print(
+                'Headers: Authorization: Bearer ${token.substring(0, min(10, token.length))}...');
+            print('Body: {');
+            print('  "npp": "$nrk",');
+            print('  "latitude": "$lat",');
+            print('  "longitude": "$long",');
+            print('  "branch_id": "$branch_id"');
+            print('}');
+
+            final getResult = await http
+                .post(Uri.parse(ApiConstants.BASE_URL + "/" + absenType),
+                    headers: <String, String>{
+                      'Content-Type': 'application/json; charset=UTF-8',
+                      'Authorization': 'Bearer $token'
+                    },
+                    body: jsonEncode(<String, String>{
+                      'npp': nrk.toString(),
+                      'latitude': lat.toString(),
+                      'longitude': long.toString(),
+                      'branch_id': branch_id
+                    }))
+                .timeout(const Duration(seconds: 20));
+
+            print('Attendance response status: ${getResult.statusCode}');
+            print('Attendance response body: ${getResult.body}');
 
             String result = getResult.body.toString().replaceAll('""', "");
 
             if (jsonDecode(result)['rcode'] == "00") {
+              // Update attendance time immediately after successful check-in/out
+              final now = DateTime.now();
+              final currentTime =
+                  "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+              await _attendanceService.updateAttendanceTime(
+                  absenType, currentTime);
 
-              String message = jsonDecode(result)['message'];
-              Navigator.of(context,rootNavigator: true).pop(context);
-              QuickAlert.show(
-                headerBackgroundColor:Colors.black,
+              // Update local state
+              setState(() {
+                if (absenType == 'absenmasuk') {
+                  _jamMasuk = currentTime;
+                } else {
+                  _jamPulang = currentTime;
+                }
+              });
+
+              // Close loading modal first
+              Navigator.of(context, rootNavigator: true).pop(context);
+
+              // Show different dialog based on late status
+              showDialog(
                 context: context,
-                type: QuickAlertType.success,
-                title: "Berhasil",
-                text: message,
-                confirmBtnText: 'Oke',
-                confirmBtnColor: Color.fromRGBO(1, 101, 65, 1),
+                builder: (context) => CustomAlert(
+                  title: absenType == 'absenmasuk'
+                      ? (_isLate() ? "Terlambat" : "Berhasil")
+                      : "Berhasil",
+                  message: absenType == 'absenmasuk'
+                      ? _getCheckInMessage()
+                      : "Absensi pulang berhasil. Selamat beristirahat!",
+                  icon: Icons.check_circle_outline,
+                  iconColor: Color.fromRGBO(1, 101, 65, 1),
+                ),
               );
 
-            } else if (jsonDecode(result)['rcode'] == "02") {
+              // Trigger attendance update notification
+              _attendanceService.notifyListeners();
 
+              // Refresh data from API after successful check-in/out
+              _loadAttendanceData();
+
+              return "absen berhasil";
+            } else {
               String message = jsonDecode(result)['message'];
-              Navigator.of(context,rootNavigator: true).pop(context);
-
-              QuickAlert.show(
-                headerBackgroundColor:Colors.black,
+              Navigator.of(context, rootNavigator: true).pop(context);
+              showDialog(
                 context: context,
-                type: QuickAlertType.info,
-                title: "Info",
-                text: message,
-                confirmBtnText: 'Oke',
-                // confirmBtnColor: Color.fromRGBO(1, 101, 65, 1),
-
+                builder: (context) => CustomAlert(
+                  title: "Warning",
+                  message: message,
+                  icon: Icons.warning_amber_rounded,
+                  iconColor: Colors.red,
+                ),
               );
+              return "absen gagal";
             }
-          } on TimeoutException catch (_) {
-
-            Navigator.of(context,rootNavigator: true).pop(context);
-            _fetchDialogWarning(context, "Koneksi timeout, silahkan coba lagi");
-
+          } on TimeoutException catch (e) {
+            print('\n=== Attendance request timeout ===');
+            print('Error: $e');
+            Navigator.of(context, rootNavigator: true).pop(context);
+            showDialog(
+              context: context,
+              builder: (context) => CustomAlert(
+                title: "Warning",
+                message: "Koneksi timeout, silahkan coba lagi!",
+                icon: Icons.warning_amber_rounded,
+                iconColor: Colors.red,
+              ),
+            );
+            return "absen gagal";
           } catch (e) {
-
-            Navigator.of(context,rootNavigator: true).pop(context);
-            _fetchDialogWarning(context, "Koneksi timeout, silahkan coba lagi");
+            print('\n=== Attendance request error ===');
+            print('Error: $e');
+            Navigator.of(context, rootNavigator: true).pop(context);
+            showDialog(
+              context: context,
+              builder: (context) => CustomAlert(
+                title: "Warning",
+                message: "Terjadi kesalahan, silahkan coba lagi!",
+                icon: Icons.warning_amber_rounded,
+                iconColor: Colors.red,
+              ),
+            );
+            return "absen gagal";
           }
-
-        }else {
-
-          var message = "Anda berada diluar lokasi absen!";
-
-          Navigator.of(context,rootNavigator: true).pop(context);
-
-          QuickAlert.show(
+        } else {
+          Navigator.of(context, rootNavigator: true).pop(context);
+          showDialog(
             context: context,
-            type: QuickAlertType.warning,
-            title: "Warning",
-            text: message,
-            confirmBtnColor : Color.fromRGBO(1, 101, 65, 1),
-            confirmBtnText: 'Oke',
+            builder: (context) => CustomAlert(
+              title: "Warning",
+              message: "Anda berada diluar radius kantor!",
+              icon: Icons.warning_amber_rounded,
+              iconColor: Colors.red,
+            ),
           );
-
           return "absen gagal";
         }
-
-      }else {
-        Navigator.of(context,rootNavigator: true).pop(context);
-        _fetchDialogWarning(context, "Terjadi Kesalahan, silahkan coba lagi");
+      } else {
+        String message = jsonDecode(
+            checkSessionResult.body.toString().replaceAll('""', ""))['message'];
+        Navigator.of(context, rootNavigator: true).pop(context);
+        showDialog(
+          context: context,
+          builder: (context) => CustomAlert(
+            title: "Warning",
+            message: message,
+            icon: Icons.warning_amber_rounded,
+            iconColor: Colors.red,
+          ),
+        );
+        return "absen gagal";
       }
-    } on TimeoutException catch (_) {
+    } on TimeoutException catch (e) {
+      print('\n=== Check session timeout ===');
+      print('Error: $e');
       Navigator.of(context, rootNavigator: true).pop(context);
-      _fetchDialogWarning(context, "Koneksi timeout, silahkan coba lagi");
+      showDialog(
+        context: context,
+        builder: (context) => CustomAlert(
+          title: "Warning",
+          message: "Koneksi timeout, silahkan coba lagi!",
+          icon: Icons.warning_amber_rounded,
+          iconColor: Colors.red,
+        ),
+      );
+      return "absen gagal";
     } catch (e) {
+      print('\n=== Check session error ===');
+      print('Error: $e');
       Navigator.of(context, rootNavigator: true).pop(context);
-      _fetchDialogWarning(context, "Koneksi timeout, silahkan coba lagi" + e.toString());
+      showDialog(
+        context: context,
+        builder: (context) => CustomAlert(
+          title: "Warning",
+          message: "Terjadi kesalahan, silahkan coba lagi!",
+          icon: Icons.warning_amber_rounded,
+          iconColor: Colors.red,
+        ),
+      );
+      return "absen gagal";
     }
-
-    return "nrk";
-
   }
 
+  bool _isLate() {
+    // Define the standard start time
+    final standardStartTime = DateTime(DateTime.now().year,
+        DateTime.now().month, DateTime.now().day, 7, 45, 0 // 07:45 AM
+        );
 
-  signOut() async {
+    final now = DateTime.now();
+    final currentTime =
+        DateTime(now.year, now.month, now.day, now.hour, now.minute);
 
+    return currentTime.isAfter(standardStartTime);
+  }
+
+  String _getCheckInMessage() {
+    if (_isLate()) {
+      return 'Anda terlambat melakukan absensi. Harap segera melakukan absensi dan memberikan keterangan keterlambatan.';
+    } else {
+      return 'Absensi berhasil dilakukan tepat waktu. Selamat bekerja!';
+    }
+  }
+
+  void _updateAttendanceTime(String type, String time) {
+    setState(() {
+      if (type == 'absenmasuk') {
+        _jamMasuk = time;
+      } else {
+        _jamPulang = time;
+      }
+    });
+  }
+
+  Future<void> _loadAttendanceData() async {
+    try {
+      final data = await _attendanceService.getTodayAttendance();
+      if (mounted && data['success']) {
+        setState(() {
+          _jamMasuk = data['check_in_time'];
+          _jamPulang = data['check_out_time'];
+        });
+      }
+    } catch (e) {
+      print('Error loading attendance data: $e');
+    }
+  }
+
+  void signOut() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     prefs.clear();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (context) => Login())
-      );
+          context, MaterialPageRoute(builder: (context) => Login()));
     });
   }
 
   String googleApikey = "GOOGLE_MAP_API_KEY";
   LatLng startLocation = LatLng(27.6602292, 85.308027);
 
+  void _updateTime() {
+    setState(() {
+      _currentTime = DateFormat('HH:mm:ss').format(DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _getCurrentLocation() async {
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      final GoogleMapController controller = await _controller.future;
+      final latLng = LatLng(position.latitude, position.longitude);
+
+      controller.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: latLng,
+            zoom: 17.0,
+          ),
+        ),
+      );
+
+      setState(() {
+        currentLatLng = latLng;
+      });
+    } catch (e) {
+      print('Error getting location: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Could not get current location. Please check your location permissions.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _zoomToOffice() async {
+    try {
+      final GoogleMapController controller = await _controller.future;
+      final latLng = LatLng(latKantor, longKantor);
+
+      controller.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: latLng,
+            zoom: 17.0,
+          ),
+        ),
+      );
+
+      setState(() {
+        currentLatLng = latLng;
+      });
+    } catch (e) {
+      print('Error zooming to office: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not zoom to office location.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-
-    return Scaffold (
-        appBar: AppBar(
-            title: Text(
-                'Absensi',
-                      style: TextStyle(fontSize: 18,fontWeight: FontWeight.w500),
+    return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false, // This removes the back button
+        backgroundColor: Theme.of(context).primaryColor,
+        elevation: 0,
+        centerTitle: true,
+        titleSpacing: 0,
+        toolbarHeight: 70,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Theme.of(context).primaryColor,
+                Theme.of(context).primaryColor.withOpacity(0.8),
+              ],
             ),
-            actions: [
-              Padding(
-                padding: EdgeInsets.fromLTRB(6, 0, 6, 0),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton(
-                    icon: Icon(FluentIcons.options_20_filled,color: Colors.white,size: 25,),
-                    items: <DropdownMenuItem>[
-                      DropdownMenuItem(
-                        onTap: signOut,
-                        value: 'logout',
-                        child: Text('Logout'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      setState(() {
-                      });
-                    },
-                  ),
-                ),
-              ),
-          ],
-          backgroundColor: Color.fromRGBO(1, 101, 65, 1),
+          ),
         ),
-      // body: Scaffold(
-        body:
-        Stack(
-          children: [
-            Container (
-              child: SafeArea(
-                child: currentLatLng == null ? Center(child:CircularProgressIndicator()) : GoogleMap(
-                  circles: Set.from([
-                    Circle(
-                      circleId: CircleId("2343"),
-                      center: LatLng(latKantor,longKantor),
-                      radius: radius,
-                      fillColor: Colors.orange.shade100.withOpacity(0.5),
-                      strokeColor:  Colors.orange.shade100.withOpacity(0.1)
-                    )
-                  ]),
+        title: Padding(
+          padding: EdgeInsets.symmetric(vertical: 12),
+          child: Text(
+            'Kehadiran',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+      ),
+      body: Stack(
+        children: [
+          // Map taking space between app bar and bottom sheet
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: MediaQuery.of(context).size.height * 0.48,
+            child: Stack(
+              children: [
+                GoogleMap(
                   mapType: MapType.normal,
+                  initialCameraPosition: CameraPosition(
+                    target: currentLatLng,
+                    zoom: zoomVar,
+                  ),
+                  zoomControlsEnabled: false,
+                  myLocationButtonEnabled: false,
                   myLocationEnabled: true,
-                  compassEnabled: true,
-                  initialCameraPosition: CameraPosition(target:  LatLng(5.521358096586348, 95.33064137456458), zoom: 10),
                   onMapCreated: (GoogleMapController controller) {
                     _controller.complete(controller);
                   },
+                  circles: Set.from([
+                    Circle(
+                      circleId: CircleId("primary"),
+                      center: LatLng(latKantor, longKantor),
+                      radius: radius,
+                      fillColor: Colors.blue.withOpacity(0.2),
+                      strokeColor: Colors.blue.withOpacity(0.4),
+                      strokeWidth: 2,
+                    ),
+                    if (useSecondLocation)
+                      Circle(
+                        circleId: CircleId("secondary"),
+                        center: LatLng(latKantor2, longKantor2),
+                        radius: radius2,
+                        fillColor: Colors.blue.withOpacity(0.2),
+                        strokeColor: Colors.blue.withOpacity(0.4),
+                        strokeWidth: 2,
+                      ),
+                  ]),
                 ),
+
+                // Location status badge
+                Positioned(
+                  left: 16,
+                  bottom: 16,
+                  child: StreamBuilder<Position>(
+                    stream: Geolocator.getPositionStream(),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) return SizedBox();
+
+                      final userPosition = snapshot.data!;
+                      final distance = Geolocator.distanceBetween(
+                        userPosition.latitude,
+                        userPosition.longitude,
+                        latKantor,
+                        longKantor,
+                      );
+
+                      final bool isOutsideRadius = distance > radius;
+
+                      return Container(
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isOutsideRadius
+                              ? Colors.red[400]
+                              : Colors.green[400],
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 8,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isOutsideRadius
+                                  ? Icons.warning_rounded
+                                  : Icons.check_circle_rounded,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              isOutsideRadius
+                                  ? 'Di Luar Area Kantor'
+                                  : 'Di Dalam Area Kantor',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Custom map buttons - positioned at bottom right of map
+          Positioned(
+            bottom: MediaQuery.of(context).size.height * 0.48 + 16,
+            right: 16,
+            child: Material(
+              elevation: 0,
+              color: Colors.transparent,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 8,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: Icon(Icons.business, size: 20),
+                      onPressed: _zoomToOffice,
+                      color: Theme.of(context).primaryColor,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 8,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: Icon(Icons.my_location, size: 20),
+                      onPressed: _getCurrentLocation,
+                      color: Theme.of(context).primaryColor,
+                    ),
+                  ),
+                ],
               ),
             ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Container(
-                  margin: const EdgeInsets.only(left: 0.0, right: 0.0),
-                  height: 240,
-                  decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(50),
-                  boxShadow: [
-                  BoxShadow(
-                  color: Colors.black87.withOpacity(0.2),
-                  // color: Colors.white,
-                  blurRadius: 4,
-                  // spreadRadius: 1,
-                  offset: const Offset(0, 0)
+          ),
+
+          // Bottom Sheet with attendance info
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: MediaQuery.of(context).size.height * 0.48,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // First Card (Date and Absen Masuk/Pulang)
+                  Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.zero,
+                    ),
+                    child: Column(
+                      children: [
+                        // Date and Time Display
+                        Padding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 16),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                DateFormat('dd MMMM yyyy')
+                                    .format(DateTime.now()),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey[800],
+                                ),
+                              ),
+                              Text(
+                                _currentTime,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey[800],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Absen Masuk/Pulang Status
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              // Absen Masuk
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 50,
+                                        height: 50,
+                                        decoration: BoxDecoration(
+                                          color: _jamMasuk != '--:--'
+                                              ? Color.fromRGBO(1, 101, 65, 0.1)
+                                              : Colors.red[100],
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
+                                        child: Center(
+                                          child: Icon(
+                                            _jamMasuk != '--:--'
+                                                ? FluentIcons
+                                                    .checkmark_circle_48_regular
+                                                : FluentIcons.dismiss_24_filled,
+                                            color: _jamMasuk != '--:--'
+                                                ? Color.fromRGBO(1, 101, 65, 1)
+                                                : Colors.red,
+                                            size: 24,
+                                          ),
+                                        ),
+                                      ),
+                                      SizedBox(width: 12),
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            'Absen Masuk',
+                                            style: TextStyle(
+                                              color: Colors.grey[700],
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          SizedBox(height: 4),
+                                          Container(
+                                            width: 60,
+                                            child: Text(
+                                              _jamMasuk ?? '--:--',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                color: Colors.grey[400],
+                                                fontSize: 14,
+                                                fontFamily: 'Poppins',
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              // Center Icon
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 16),
+                                child: Icon(
+                                  Icons.calendar_month_sharp,
+                                  color: Colors.grey[700],
+                                  size: 24,
+                                ),
+                              ),
+                              // Absen Pulang
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            'Absen Pulang',
+                                            style: TextStyle(
+                                              color: Colors.grey[700],
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          SizedBox(height: 4),
+                                          Container(
+                                            width: 60,
+                                            child: Text(
+                                              _jamPulang ?? '--:--',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                color: Colors.grey[400],
+                                                fontSize: 14,
+                                                fontFamily: 'Poppins',
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      SizedBox(width: 12),
+                                      Container(
+                                        width: 50,
+                                        height: 50,
+                                        decoration: BoxDecoration(
+                                          color: _jamPulang != '--:--'
+                                              ? Color.fromRGBO(1, 101, 65, 0.1)
+                                              : Colors.red[100],
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
+                                        child: Center(
+                                          child: Icon(
+                                            _jamPulang != '--:--'
+                                                ? FluentIcons
+                                                    .checkmark_circle_48_regular
+                                                : FluentIcons.dismiss_24_filled,
+                                            color: _jamPulang != '--:--'
+                                                ? Color.fromRGBO(1, 101, 65, 1)
+                                                : Colors.red,
+                                            size: 24,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(height: 24),
+                      ],
+                    ),
                   ),
-                  ]
-                  ),
-                  child:
-                        Card(
-                            margin: EdgeInsets.zero,
-                            color: Colors.orangeAccent[600],
-                            elevation: 20,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.only(topLeft:Radius.circular(30),topRight: Radius.circular(30))
+                  // Second Card (Presence Options)
+                  Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.zero,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 1,
+                          offset: Offset(0, -2),
+                        ),
+                      ],
+                    ),
+                    padding: EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          child: Text(
+                            'Silahkan pilih jenis Absensi',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey[800],
                             ),
-                            clipBehavior: Clip.hardEdge,
-                            child: Padding(
-                              padding: EdgeInsets.all(0.0),
-                              child:
-                              SizedBox(
-                                height: 200,
-                                width: double.infinity,
-                                child:
-                                Padding(
-                                    padding: EdgeInsets.all(20),
-                                    child:
-                                    Column(
-                                      children: [
-                                        Text( 'Silahkan Melakukan Absensi',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                        ),
-                                        SizedBox(
-                                          width: 10,
-                                          height: 15,
-                                        ),
+                          ),
+                        ),
+                        SizedBox(height: 16),
+                        // Attendance Options
+                        Center(
+                          child: Container(
+                            width: 200,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _buildAttendanceOption(
+                                  'Absen Masuk',
+                                  Theme.of(context).primaryColor,
+                                  () {
+                                    setState(() {
+                                      _selectedOption = 'Absen Masuk';
+                                      _isSwipeEnabled = true;
+                                    });
+                                  },
+                                  _selectedOption == 'Absen Masuk',
+                                ),
+                                SizedBox(height: 10),
+                                _buildAttendanceOption(
+                                  'Absen Pulang',
+                                  Theme.of(context).primaryColor,
+                                  () {
+                                    setState(() {
+                                      _selectedOption = 'Absen Pulang';
+                                      _isSwipeEnabled = true;
+                                    });
+                                  },
+                                  _selectedOption == 'Absen Pulang',
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 24),
 
-                                        StreamBuilder(
-                                          builder: (context,snapshot) {
-                                            return  Text(
-                                              DateFormat('kk:mm:ss').format(DateTime.now()), textAlign: TextAlign.center,
-                                              style: TextStyle(fontSize: 14,fontWeight: FontWeight.w600),
-                                            );
-                                          },
-                                          stream: Stream.periodic(const Duration(seconds: 1)),
-                                        ),
-
-                                        SizedBox(
-                                          width: 10,
-                                          height: 4,
-                                        ),
-                                        Text(
-                                          DateFormat('EEEE dd MMMM','id').format(DateTime.now()), textAlign: TextAlign.center,
-                                        ),
-                                        SizedBox(
-                                          width: 10,
-                                          height: 30,
-                                        ),
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          crossAxisAlignment: CrossAxisAlignment.center,
+                        // Swipe to Absen Masuk
+                        if (_selectedOption != null)
+                          Container(
+                            margin: EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(32),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Theme.of(context)
+                                      .primaryColor
+                                      .withOpacity(0.15),
+                                  blurRadius: 8,
+                                  offset: Offset(0, 4),
+                                  spreadRadius: -2,
+                                ),
+                              ],
+                            ),
+                            child: Stack(
+                              children: [
+                                // Main swipe button
+                                Container(
+                                  height: 56,
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                      colors: [
+                                        Theme.of(context).primaryColor,
+                                        Theme.of(context)
+                                            .primaryColor
+                                            .withOpacity(0.8),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(32),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(width: 60),
+                                      Expanded(
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            ElevatedButton(
-                                              onPressed: () {
-                                                _checkRadius("absenmasuk");
-                                                _fetchData(context);
-                                              } ,
-                                              child: Text("Masuk",style: TextStyle(color: Colors.white,fontWeight: FontWeight.w500),),
-                                              style:
-                                              // raisedButtonStyle
-                                              ElevatedButton.styleFrom(
-                                                foregroundColor: Color.fromRGBO(1, 101, 65, 1),
-                                                backgroundColor: Color.fromRGBO(1, 101, 65, 1),
-                                                minimumSize: Size(100, 40),
+                                            Flexible(
+                                              child: Text(
+                                                'Geser untuk Absen Masuk',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
-                                            SizedBox(
-                                              width: 10,
-                                              height: 15,
-                                            ),
-                                            ElevatedButton(
-                                              onPressed: () async {
-                                                getUserCurrentLocation().then((value) async {
-                                                  print(value.latitude.toString() +"  "+value.longitude.toString());
-
-                                                  // specified current users location
-                                                  CameraPosition cameraPosition = new CameraPosition(
-                                                    // target: LatLng(latKantor, longKantor),
-                                                    target: LatLng(latKantor, longKantor),
-                                                    zoom: 17,
-                                                  );
-                                                  final GoogleMapController controller = await _controller.future;
-                                                  controller.animateCamera(CameraUpdate.newCameraPosition(cameraPosition));
-                                                  setState(() {
-                                                  });
-                                                });
-                                              },
-                                              child: Icon(Icons.location_city_sharp,color: Color.fromRGBO(1, 101, 65, 1)),
-                                              style:
-                                              ElevatedButton.styleFrom(
-                                                foregroundColor: Colors.white,
-                                                backgroundColor: Colors.white,
-                                                side: const BorderSide(color: Color.fromRGBO(1, 101, 65, 1),width: 1.9),
-                                                minimumSize: Size(50, 40),
-                                              ),
-                                            ),
-                                            SizedBox(
-                                              width: 10,
-                                              height: 15,
-                                            ),
-                                            ElevatedButton (
-                                              onPressed: () {
-                                                _konfirmasiAbsenPulang(context, "message");
-                                                // _checkRadius('absenpulang');
-                                                // _fetchData(context);
-                                              } ,
-                                              child: Text("Pulang",style: TextStyle(color:Colors.white,fontWeight: FontWeight.w500),),
-                                              style:
-
-                                              ElevatedButton.styleFrom(
-                                                foregroundColor: Color.fromRGBO(1, 101, 65, 1),
-                                                backgroundColor: Color.fromRGBO(1, 101, 65, 1),
-                                                minimumSize: Size(100, 40),
-                                              ),
+                                            SizedBox(width: 4),
+                                            Icon(
+                                              Icons.waving_hand_rounded,
+                                              color: Colors.yellow,
+                                              size: 16,
                                             ),
                                           ],
                                         ),
-                                      ],
-                                    )
+                                      ),
+                                      SizedBox(width: 60),
+                                    ],
+                                  ),
+                                ),
+                                // Sliding arrow button
+                                if (_isSwipeEnabled)
+                                  AnimatedPositioned(
+                                    duration: Duration(
+                                        milliseconds: _isSliding ? 0 : 200),
+                                    curve: Curves.easeOutBack,
+                                    left: 8 + _slideValue,
+                                    top: 4,
+                                    child: GestureDetector(
+                                      onHorizontalDragStart: (details) {
+                                        setState(() {
+                                          _isSliding = true;
+                                        });
+                                      },
+                                      onHorizontalDragUpdate: (details) {
+                                        setState(() {
+                                          _slideValue =
+                                              (_slideValue + details.delta.dx)
+                                                  .clamp(
+                                                      0,
+                                                      MediaQuery.of(context)
+                                                              .size
+                                                              .width -
+                                                          180);
+                                        });
+                                      },
+                                      onHorizontalDragEnd: (details) {
+                                        if (_slideValue >
+                                            MediaQuery.of(context).size.width -
+                                                220) {
+                                          _checkRadius(
+                                              _selectedOption == 'Absen Masuk'
+                                                  ? 'absenmasuk'
+                                                  : 'absenpulang');
+                                          _fetchData(context);
+                                        }
+                                        setState(() {
+                                          _isSliding = false;
+                                          _slideValue = 0;
+                                        });
+                                      },
+                                      child: TweenAnimationBuilder(
+                                        duration: Duration(milliseconds: 150),
+                                        tween: Tween<double>(
+                                          begin: 0,
+                                          end: _slideValue /
+                                              (MediaQuery.of(context)
+                                                      .size
+                                                      .width -
+                                                  180),
+                                        ),
+                                        builder:
+                                            (context, double value, child) {
+                                          return Transform.scale(
+                                            scale: 1 + (value * 0.1),
+                                            child: Transform.rotate(
+                                              angle: value * 0.5,
+                                              child: Container(
+                                                width: 48,
+                                                height: 48,
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white,
+                                                  shape: BoxShape.circle,
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black
+                                                          .withOpacity(0.1),
+                                                      blurRadius: 8,
+                                                      offset: Offset(0, 2),
+                                                      spreadRadius: -2,
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: Center(
+                                                  child: Icon(
+                                                    Icons.chevron_right_rounded,
+                                                    color: Theme.of(context)
+                                                        .primaryColor,
+                                                    size: 28,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  Positioned(
+                                    left: 8,
+                                    top: 4,
+                                    child: Container(
+                                      width: 48,
+                                      height: 48,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color:
+                                                Colors.black.withOpacity(0.1),
+                                            blurRadius: 8,
+                                            offset: Offset(0, 2),
+                                            spreadRadius: -2,
+                                          ),
+                                        ],
+                                      ),
+                                      padding: EdgeInsets.all(2),
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[400],
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                          Icons.info_outline,
+                                          color: Colors.white,
+                                          size: 24,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          )
+                        else
+                          Stack(
+                            children: [
+                              Container(
+                                height: 48,
+                                margin: EdgeInsets.symmetric(horizontal: 20),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[400],
+                                  borderRadius: BorderRadius.circular(24),
+                                ),
+                                child: Row(
+                                  children: [
+                                    SizedBox(width: 48),
+                                    Expanded(
+                                      child: Text(
+                                        'Select an option above',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(width: 48),
+                                  ],
                                 ),
                               ),
-                            )
-                        ),
+                              Positioned(
+                                left: 12,
+                                top: -2,
+                                child: Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.15),
+                                        blurRadius: 6,
+                                        offset: Offset(0, 2),
+                                      ),
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.1),
+                                        blurRadius: 3,
+                                        offset: Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                  padding: EdgeInsets.all(2),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[400],
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.info_outline,
+                                      color: Colors.white,
+                                      size: 24,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            )
-          ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAttendanceOption(
+      String title, Color color, VoidCallback onTap, bool isSelected) {
+    return SizedBox(
+      width: double.infinity,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            border: Border.all(color: color, width: 1.5),
+            borderRadius: BorderRadius.circular(12),
+            color: isSelected ? color : Colors.transparent,
+          ),
+          child: Center(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: isSelected ? Colors.white : color,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
         ),
+      ),
     );
   }
 }

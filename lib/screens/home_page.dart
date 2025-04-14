@@ -1,453 +1,863 @@
-import 'dart:async';
-import 'dart:convert';
-import 'dart:ui';
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:monitoring_project/screens/page_rekap_absensi.dart';
-import '../Models/DataEmployee.dart';
-import 'Apis.dart';
-import 'page_login.dart';
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'page_webview_show_blog.dart';
-import '../controller/HomeController.dart';
-import 'package:http/http.dart' as http;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../repository/attendance_recap_repository.dart';
+import '../bloc/notification/notification_bloc.dart';
+import '../bloc/notification/notification_state.dart';
+import './notification_screen.dart';
+import './announcement_list_page.dart';
+import './announcement_detail_page.dart';
+import '../models/attendance_record.dart';
+import '../widgets/skeleton_text.dart';
+import 'page_rekap_absensi.dart';
+import 'package:intl/intl.dart';
+import 'dart:math' as math;
+import './attendance_recap_screen.dart';
+import '../services/attendance_service.dart';
 
-class HomePage extends StatefulWidget {
-  @override
-  _Homescreenstate createState() => _Homescreenstate();
+extension StringCasingExtension on String {
+  String toTitleCase() => this
+      .split(' ')
+      .map((str) => str.length > 0
+          ? '${str[0].toUpperCase()}${str.substring(1).toLowerCase()}'
+          : '')
+      .join(' ');
 }
 
-class _Homescreenstate extends State<HomePage> with WidgetsBindingObserver {
+class GeometricPatternPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.black.withOpacity(0.1)
+      ..style = PaintingStyle.fill;
 
-  SharedPreferences? preferences;
-  late SharedPreferences _sharedPreferences;
-  late Future<List<DataEmpoyee>> futureData;
-  final storage = const FlutterSecureStorage();
-  HomeController homeController = HomeController();
+    // Create overlapping rectangles
+    var path1 = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width * 0.7, 0)
+      ..lineTo(size.width * 0.5, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+
+    var path2 = Path()
+      ..moveTo(size.width * 0.5, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width * 0.8, size.height)
+      ..lineTo(size.width * 0.3, size.height)
+      ..close();
+
+    // Draw the paths with different opacities
+    canvas.drawPath(path1, paint..color = Colors.black.withOpacity(0.05));
+    canvas.drawPath(path2, paint..color = Colors.black.withOpacity(0.07));
+  }
 
   @override
-  void initState() {
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
+}
 
-    WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      initializePreference().whenComplete(() {
-        setState(() {});
-      });
-    });
+class HomePage extends StatefulWidget {
+  const HomePage({Key? key}) : super(key: key);
 
-    homeController.fetchData();
-    futureData = homeController.fetchData();
-  }
+  @override
+  _HomeScreenState createState() => _HomeScreenState();
+}
 
-  DateTime now = DateTime.now();
+class _HomeScreenState extends State<HomePage>
+    with SingleTickerProviderStateMixin {
+  bool _isLoading = true;
+  bool _isLoadingAttendance = true;
+  String userName = '';
+  String? jamMasuk;
+  String? jamPulang;
+  String? imageUrl;
+  AnimationController? _animationController;
+  Animation<double>? _pulseAnimation;
+  final AttendanceRecapRepository _attendanceRepository =
+      AttendanceRecapRepository();
+  final _attendanceService = AttendanceService();
+  final storage = const FlutterSecureStorage();
 
-  Future<void> initializePreference() async {
-    this.preferences = await SharedPreferences.getInstance();
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-  }
-
-  final List<List> imgList = [];
-  final List<List> blogList = [];
-
-  Future<void> refreshData() async {
-
-    _sharedPreferences = await SharedPreferences.getInstance();
-    print(_sharedPreferences.getString("npp"));
-    String? npp = _sharedPreferences.getString("npp");
-
-    var token = await storage.read(key: 'token');
-
-    final response = await http.get(
-      Uri.parse(ApiConstants.BASE_URL+"/getblog/${npp}"),
-      headers: {
-        'Content-Type': 'application/json; charset=UTF-8',
-        'Authorization': 'Bearer $token'
-      },
-    );
-
-    print(json.decode(response.body));
-    if (response.statusCode == 200) {
-      List jsonResponse = json.decode(response.body);
-      setState(() {
-      futureData = homeController.fetchData();
-      homeController.fetchData();
-      });
+  String _getGreeting() {
+    var hour = DateTime.now().hour;
+    if (hour < 12) {
+      return 'Selamat Pagi';
+    } else if (hour < 15) {
+      return 'Selamat Siang';
+    } else if (hour < 18) {
+      return 'Selamat Sore';
     } else {
-      throw Exception('Unexpected error occured!');
+      return 'Selamat Malam';
     }
   }
 
-  signOut() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    prefs.clear();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (context) => Login()));
-    });
+  // Sample announcement data
+  final List<Map<String, String>> announcements = [
+    {
+      'title': 'Notice of position promotion for "Marsha Lenathea"',
+      'subtitle': 'from Jr. UI/UX Designer becomes Sr. UI/UX Designer',
+      'sender': 'Kimberly Violon',
+      'role': 'Head of HR',
+      'attachment': 'Promotion Letter Sr. UI/UX Designer.pdf',
+      'avatar': 'assets/images/avatar_hr.jpg',
+    },
+    {
+      'title': 'Notice of position promotion for "Shania Gracia"',
+      'subtitle': 'from Jr. Mobile Developer becomes Sr. Mobile Developer',
+      'sender': 'Georgina Collaby',
+      'role': 'HR Management',
+      'attachment': 'Promotion Letter Sr. Mobile Developer.pdf',
+      'avatar': 'assets/images/avatar_hr2.jpg',
+    },
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Initialize animation controller first
+    _animationController = AnimationController(
+      duration: const Duration(seconds: 1),
+      vsync: this,
+    )..repeat(reverse: true);
+
+    // Create pulse animation
+    _pulseAnimation = Tween<double>(
+      begin: 1.0,
+      end: 1.2,
+    ).animate(CurvedAnimation(
+      parent: _animationController!,
+      curve: Curves.easeInOut,
+    ));
+
+    _loadUserData();
+    _loadTodayAttendance();
+
+    // Add listener to attendance service
+    _attendanceService.addListener(_loadTodayAttendance);
+  }
+
+  @override
+  void dispose() {
+    // Remove listener when disposing
+    _attendanceService.removeListener(_loadTodayAttendance);
+    
+    _animationController?.dispose();
+    super.dispose();
+  }
+
+  bool _isLate() {
+    if (jamMasuk == null || jamMasuk == '--:--') return false;
+    final clockIn = DateFormat('HH:mm').parse(jamMasuk!);
+    final targetTime = DateFormat('HH:mm').parse('07:55');
+    return clockIn.isAfter(targetTime);
   }
 
   @override
   Widget build(BuildContext context) {
-    String greeting = "";
-    int hours = now.hour;
-
-    if (hours >= 1 && hours <= 12) {
-      greeting = "Selamat Pagi";
-    } else if (hours >= 12 && hours <= 16) {
-      greeting = "Selamat Siang";
-    } else if (hours >= 16 && hours <= 21) {
-      greeting = "Selamat Sore";
-    } else if (hours >= 21 && hours <= 24) {
-      greeting = "Selamat Malam";
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
     }
 
     return Scaffold(
-        appBar: AppBar(
-          backgroundColor: Color.fromRGBO(1, 101, 65, 1),
-          bottomOpacity: 0.0,
-          elevation: 0.0,
-          centerTitle: false,
-          title: const Text(
-            'Beranda',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-          ),
-          actions: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(6, 0, 6, 0),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton(
-                  icon: Icon(
-                    FluentIcons.options_20_filled,
-                    color: Colors.white,
-                    size: 25,
-                  ),
-                  items: <DropdownMenuItem>[
-                    DropdownMenuItem(
-                      onTap: signOut,
-                      value: 'logout',
-                      child: Text('Logout'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    setState(() {});
-                  },
-                ),
-              ),
+      backgroundColor: const Color(0xFFF3F4F6), // Light gray background
+      body: Stack(
+        children: [
+          // Header Background
+          Container(
+            height: 280,
+            decoration: BoxDecoration(
+              color: const Color.fromRGBO(1, 101, 65, 1),
             ),
-          ],
-        ),
-        body: Container(
-            child: RefreshIndicator(
-                onRefresh: () => refreshData(),
-                child: ListView(
-                  shrinkWrap: false,
-                  children: [
-                    Stack(
-                      children: [
-                        ClipPath(
-                          clipper: CustomShape(),
-                          child: Container(
-                            height: 150,
-                            color: Color.fromRGBO(1, 101, 65, 1),
-                          ),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.fromLTRB(4, 0, 4, 0),
-                          child: Column(
-                            children: [
-                              SizedBox(
-                                width: 10,
-                                height: 10,
+            child: Stack(
+              children: [
+                CustomPaint(
+                  painter: GeometricPatternPainter(),
+                  size: Size(double.infinity, 280),
+                ),
+                // Notification Icon
+                Positioned(
+                  top: 40,
+                  right: 16,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Stack(
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: IconButton(
+                              icon: const Icon(
+                                FluentIcons.alert_24_regular,
+                                color: Colors.white,
+                                size: 24,
                               ),
-                              Center(
-                                  child: SizedBox(
-                                width: 500,
-                                height: 120,
-                                child: Card(
-                                    elevation: 3,
-                                    shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.only(
-                                            topLeft: Radius.circular(10),
-                                            topRight: Radius.circular(10),
-                                            bottomLeft: Radius.circular(10),
-                                            bottomRight: Radius.circular(10))),
-                                    child: Padding(
-                                      padding:
-                                          EdgeInsets.fromLTRB(10, 22, 22, 10),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.start,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Column(
-                                            children: [
-                                              Icon(
-                                                  FluentIcons
-                                                      .person_board_28_filled,
-                                                  size: 60,
-                                                  color: Color.fromRGBO(
-                                                      12, 68, 49, 1)),
-                                              SizedBox(
-                                                width: 0,
-                                                height: 3,
-                                              ),
-                                            ],
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const NotificationScreen(),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          // Red dot for unread notifications
+                          BlocBuilder<NotificationBloc, NotificationState>(
+                            builder: (context, state) {
+                              if (state is NotificationsLoadSuccess && 
+                                  state.unreadCount > 0) {
+                                return Positioned(
+                                  top: 12,
+                                  right: 14,
+                                  child: Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.red,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                );
+                              }
+                              return const SizedBox.shrink();
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          SingleChildScrollView(
+            child: Column(
+              children: [
+                // Profile Section
+                Container(
+                  padding: const EdgeInsets.fromLTRB(0, 60, 0, 60),
+                  child: Column(
+                    children: [
+                      // Profile Image
+                      AnimatedBuilder(
+                        animation: _animationController ??
+                            AnimationController(vsync: this),
+                        builder: (context, child) {
+                          return Transform.scale(
+                            scale: _isLate()
+                                ? _pulseAnimation?.value ?? 1.0
+                                : 1.0,
+                            child: Stack(
+                              children: [
+                                Container(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: _isLate()
+                                          ? Colors.red.withOpacity(0.8)
+                                          : const Color.fromARGB(
+                                              255, 212, 212, 212),
+                                      width: 4,
+                                    ),
+                                  ),
+                                  child: ClipOval(
+                                    child: Image.asset(
+                                      'assets/images/avatar_3d.jpg',
+                                      fit: BoxFit.cover,
+                                      width: 80,
+                                      height: 80,
+                                    ),
+                                  ),
+                                ),
+                                if (_isLate())
+                                  Positioned(
+                                    right: -2,
+                                    top: -2,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius:
+                                            BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: Colors.red.withOpacity(0.8),
+                                          width: 1.5,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color:
+                                                Colors.black.withOpacity(0.1),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
                                           ),
-                                          SizedBox(
-                                            width: 15,
-                                            height: 3,
-                                          ),
-                                          Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(greeting,
-                                                  style: TextStyle(
-                                                      fontSize: 14,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      color: Color.fromRGBO(
-                                                          12, 68, 49, 1),
-                                                      fontFamily: 'Roboto')),
-                                              SizedBox(
-                                                width: 0,
-                                                height: 4,
-                                              ),
-                                              Text(
-                                                '${this.preferences?.getString("nama")} | ${this.preferences?.getString("npp")}'
-                                                    .toTitleCase(),
-                                                style: TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Color.fromRGBO(
-                                                        12, 68, 49, 1),
-                                                    fontFamily: 'Roboto'),
-                                              ),
-                                              SizedBox(
-                                                width: 0,
-                                                height: 4,
-                                              ),
-                                              Text(
-                                                  '${this.preferences?.getString("nama_kantor")} |  ${this.preferences?.getString("kode_kantor")}'
-                                                      .toTitleCase(),
-                                                  style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: Color.fromRGBO(
-                                                          12, 68, 49, 1),
-                                                      fontFamily: 'Roboto')),
-                                              SizedBox(
-                                                width: 0,
-                                                height: 3,
-                                              ),
-                                            ],
-                                          )
                                         ],
                                       ),
-                                    )),
-                              )),
-                              SizedBox(
-                                width: 0,
-                                height: 5,
+                                      child: const Text(
+                                        'Telat',
+                                        style: TextStyle(
+                                          color: Colors.red,
+                                          fontSize: 8,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      // Greeting Text
+                      RichText(
+                        textAlign: TextAlign.center,
+                        text: TextSpan(
+                          style: const TextStyle(
+                            fontSize: 16,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          children: [
+                            TextSpan(text: '${_getGreeting()}, '),
+                            const TextSpan(text: '👋'),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        userName,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    // White Background Card
+                    Container(
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                      ),
+                      child: const SizedBox(
+                        width: double.infinity,
+                        height: 130,
+                      ),
+                    ),
+                    // Attendance Card (Floating)
+                    Positioned(
+                      top: -50,
+                      left: 20,
+                      right: 20,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.08),
+                              offset: const Offset(0, 4),
+                              blurRadius: 16,
+                              spreadRadius: -1,
+                            ),
+                          ],
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            children: [
+                              const Text(
+                                'Kehadiran',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black,
+                                ),
                               ),
-                              Container(
-                                  alignment: Alignment.bottomLeft,
-                                  padding: const EdgeInsets.all(10),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    mainAxisAlignment: MainAxisAlignment.start,
+                              const SizedBox(height: 4),
+                              Text(
+                                'Jam Kerja : 07.45 - 17.00',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 13,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              // Clock Times
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Column(
                                     children: [
-                                      Card(
-                                        elevation: 2,
-                                        clipBehavior: Clip.antiAlias,
-                                        color: Colors.white,
-                                        child: InkWell(
-                                          splashColor:
-                                              Colors.blue.withAlpha(30),
-                                          onTap: () => {
-                                            Navigator.push<Widget>(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) => RekapAbsensi(
-                                                    id: "${this.preferences?.getString("npp")}"),
-                                              ),
+                                      _isLoadingAttendance
+                                          ? const SkeletonText(
+                                              width: 80,
+                                              height: 24,
                                             )
-                                          },
-                                          child: Container(
-                                            child: SizedBox(
-                                              width: 105,
-                                              height: 90,
-                                              child: Center(
-                                                child: Column(
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment
-                                                            .center,
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .center,
-                                                    children: [
-                                                      Icon(
-                                                          FluentIcons
-                                                              .phone_screen_time_20_filled,
-                                                          size: 43,
-                                                          color: Color.fromRGBO(
-                                                              12, 68, 49, 1)),
-                                                      SizedBox(height: 10),
-                                                      Text("Rekap Absensi",
-                                                          style: TextStyle(
-                                                              fontSize: 11,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .w600,
-                                                              fontFamily:
-                                                                  'Roboto')),
-                                                    ]),
+                                          : Text(
+                                              jamMasuk ?? '--:--',
+                                              style: TextStyle(
+                                                fontFamily: 'Poppins',
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.grey[800],
+                                                letterSpacing: 3,
                                               ),
                                             ),
-                                          ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Jam Masuk',
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
                                         ),
                                       ),
                                     ],
-                                  )),
-                              Divider(
-                                color: Colors.black12,
-                                indent: 10,
-                                endIndent: 10,
-                                thickness: 1,
-                              ),
-                              SizedBox(
-                                width: 0,
-                                height: 13,
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                    left: 10.0, right: 10.0),
-                                child: Row(
-                                  children: [
-                                    Text("Informasi",
-                                        style: TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                            color:
-                                                Color.fromRGBO(12, 68, 49, 1),
-                                            fontFamily: 'Roboto')),
-                                    SizedBox(
-                                      width: 5,
-                                      height: 0,
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 32),
+                                    child: Container(
+                                      width: 1,
+                                      height: 32,
+                                      color: Colors.grey[300],
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                  Column(
+                                    children: [
+                                      _isLoadingAttendance
+                                          ? const SkeletonText(
+                                              width: 80,
+                                              height: 24,
+                                            )
+                                          : Text(
+                                              jamPulang ?? '--:--',
+                                              style: TextStyle(
+                                                fontFamily: 'Poppins',
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.grey[800],
+                                                letterSpacing: 3,
+                                              ),
+                                            ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Jam Pulang',
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ),
-                              SizedBox(
-                                width: 0,
-                                height: 13,
-                              ),
-                              SingleChildScrollView(
-                                  child: Padding(
-                                padding: const EdgeInsets.only(
-                                    left: 8.0, right: 8.0),
-                                child: FutureBuilder<List<DataEmpoyee>>(
-                                  future: futureData,
-                                  builder: (context, snapshot) {
-                                    if (snapshot.hasData) {
-                                      List<DataEmpoyee> data = snapshot.data!;
-                                      return ListView.builder(
-                                          shrinkWrap: true,
-                                          scrollDirection: Axis.vertical,
-                                          itemCount: data.length,
-                                          itemBuilder: (BuildContext context,
-                                              int index) {
-                                            return Card(
-                                              clipBehavior: Clip.hardEdge,
-                                              child: InkWell(
-                                                  splashColor:
-                                                      Colors.blue.withAlpha(30),
-                                                  onTap: () {
-                                                    Navigator.push<Widget>(
-                                                      context,
-                                                      MaterialPageRoute(
-                                                        builder: (context) =>
-                                                            WebViewApp(
-                                                                id: data[index]
-                                                                    .id
-                                                                    .toString()),
-                                                      ),
-                                                    );
-                                                    // debugPrint('Card tapped.');
-                                                  },
-                                                  child: ListTile(
-                                                    title: Text(
-                                                        data[index].title,
-                                                        style: TextStyle(
-                                                            fontSize: 15,
-                                                            fontWeight:
-                                                                FontWeight.bold,
-                                                            color: Colors
-                                                                .black87)),
-                                                    subtitle: Text(
-                                                      data[index]
-                                                          .createdAt
-                                                          .substring(0, 10),
-                                                      style: TextStyle(
-                                                          fontSize: 13),
-                                                    ),
-                                                    // leading: Text(data[index].createdAt.substring(0,10)),
-                                                    // trailing: Icon(FluentIcons
-                                                    //     .book_information_24_filled),
-                                                  )),
-                                            );
-                                          });
-                                    } else if (snapshot.hasError) {
-                                      return Text("${snapshot.error}");
-                                    }
-                                    // By default show a loading spinner.
-                                    return CircularProgressIndicator(
-                                      valueColor:
-                                          new AlwaysStoppedAnimation<Color>(
-                                              Color.fromRGBO(1, 101, 65, 1)),
-                                    );
-                                  },
-                                ),
-                              )),
                             ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                // Quick Actions
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _buildQuickAction(
+                          icon: FluentIcons
+                              .receipt_24_regular, // Receipt/payroll icon
+                          label: 'Gaji Saya',
+                          color: const Color(0xFFE65100), // Dark Orange
+                          onTap: () {},
+                        ),
+                        _buildQuickAction(
+                          icon: FluentIcons
+                              .calendar_checkmark_24_regular, // Calendar with checkmark for attendance
+                          label: 'Kehadiran',
+                          color: const Color(0xFF6A1B9A), // Dark Purple
+                          onTap: _onKehadiranTap,
+                        ),
+                        _buildQuickAction(
+                          icon: FluentIcons
+                              .calendar_cancel_24_regular, // Calendar for time off
+                          label: 'Izin',
+                          color: const Color(0xFF1565C0), // Dark Blue
+                          onTap: () {},
+                        ),
+                        _buildQuickAction(
+                          icon: FluentIcons
+                              .mail_inbox_24_regular, // Inbox/approval icon
+                          label: 'Persetujuan',
+                          color: const Color(0xFFC62828), // Dark Red
+                          onTap: () {},
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 5),
+                // Office Announcement Section
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,  // Changed back to white
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Header
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Pengumuman Kantor',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black,
+                                fontFamily: 'Poppins',
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const AnnouncementListPage(),
+                                  ),
+                                );
+                              },
+                              child: const Text(
+                                'Lihat Semua',
+                                style: TextStyle(
+                                  color: Color.fromRGBO(1, 101, 65, 1),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Poppins',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        // Announcement Cards in ScrollView
+                        SizedBox(
+                          height: 300, // Fixed height for scroll view
+                          child: ListView.builder(
+                            padding: EdgeInsets.zero,
+                            itemCount: announcements.length,
+                            itemBuilder: (context, index) => Card(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              elevation: 0,
+                              color: Colors.white,  // Explicit white background for card
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(
+                                  color: Colors.grey.shade200,
+                                  width: 1,
+                                ),
+                              ),
+                              child: InkWell(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => AnnouncementDetailPage(
+                                        announcement: announcements[index],
+                                      ),
+                                    ),
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // Header with avatar
+                                      Row(
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 20,
+                                            backgroundImage: AssetImage(
+                                              announcements[index]['avatar']!,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  announcements[index]['sender']!,
+                                                  style: const TextStyle(
+                                                    fontFamily: 'Poppins',
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  announcements[index]['role']!,
+                                                  style: TextStyle(
+                                                    fontFamily: 'Poppins',
+                                                    fontSize: 12,
+                                                    color: Colors.grey[600],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 16),
+                                      // Announcement content
+                                      Text(
+                                        announcements[index]['title']!,
+                                        style: const TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        announcements[index]['subtitle']!,
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 13,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      // Attachment
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 8,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[100],
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              FluentIcons.document_pdf_24_regular,
+                                              size: 20,
+                                              color: Colors.grey[700],
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Flexible(
+                                              child: Text(
+                                                announcements[index]['attachment']!,
+                                                style: TextStyle(
+                                                  fontFamily: 'Poppins',
+                                                  fontSize: 12,
+                                                  color: Colors.grey[700],
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ],
                     ),
-                  ],
-                ))));
-  }
-}
-
-class CustomShape extends CustomClipper<Path> {
-  @override
-  getClip(Size size) {
-    double height = size.height;
-    double width = size.width;
-    var path = Path();
-    path.lineTo(0, height - 70);
-    path.quadraticBezierTo(width / 2, height, width, height - 70);
-    path.lineTo(width, 0);
-    path.close();
-
-    return path;
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  @override
-  bool shouldReclip(CustomClipper oldClipper) {
-    return true;
+  void _onKehadiranTap() async {
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        },
+      );
+
+      // Get token and NPP
+      final token = await storage.read(key: 'auth_token');
+      final prefs = await SharedPreferences.getInstance();
+      final npp = prefs.getString('npp');
+
+      // Pop loading dialog
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
+      if (token == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sesi anda telah berakhir. Silakan login kembali.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // Navigate to RekapAbsensi
+      if (!mounted) return;
+      Navigator.of(context).push(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) {
+            return FadeTransition(
+              opacity: animation,
+              child: RekapAbsensi(id: npp ?? ''),
+            );
+          },
+          transitionDuration: const Duration(milliseconds: 200),
+        ),
+      );
+    } catch (e) {
+      // Pop loading dialog if it's still showing
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
-}
 
-extension StringCasingExtension on String {
-  String toCapitalized() =>
-      length > 0 ? '${this[0].toUpperCase()}${substring(1).toLowerCase()}' : '';
+  Widget _buildQuickAction({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: () {
+        // Add haptic feedback for better interaction
+        HapticFeedback.lightImpact();
+        onTap();
+      },
+      borderRadius: BorderRadius.circular(12),
+      splashColor: color.withOpacity(0.1),
+      highlightColor: color.withOpacity(0.05),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        child: TweenAnimationBuilder<double>(
+          duration: const Duration(milliseconds: 200),
+          tween: Tween<double>(begin: 1, end: 1),
+          builder: (context, value, child) {
+            return Transform.scale(
+              scale: value,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      icon,
+                      color: color,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 12,
+                      color: Colors.grey[800],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+          onEnd: () {},
+        ),
+      ),
+    );
+  }
 
-  String toTitleCase() => replaceAll(RegExp(' +'), ' ')
-      .split(' ')
-      .map((str) => str.toCapitalized())
-      .join(' ');
+  Future<void> _loadTodayAttendance() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoadingAttendance = true;
+    });
+
+    try {
+      final data = await _attendanceService.getTodayAttendance();
+      if (data['success']) {
+        setState(() {
+          jamMasuk = data['check_in_time'];
+          jamPulang = data['check_out_time'];
+          _isLoadingAttendance = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading today attendance: $e');
+      setState(() {
+        _isLoadingAttendance = false;
+      });
+    }
+  }
+
+  Future<void> _loadUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      userName = prefs.getString('nama')?.toTitleCase() ?? '';
+      imageUrl = prefs.getString('image_url');
+      _isLoading = false;
+    });
+  }
 }

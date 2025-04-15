@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyDFT6KH2D6q_CziIwhy9nQXSR2_Krnjvcw</string>
+	<key>GCM_SENDER_ID</key>
+	<string>398639345647</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.example.absensiOnline</string>
+	<key>PROJECT_ID</key>
+	<string>absensi-mobile-bc8bc</string>
+	<key>STORAGE_BUCKET</key>
+	<string>absensi-mobile-bc8bc.appspot.com</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:398639345647:ios:528052184ad0eb9839d01a</string>
+</dict>
+</plist>

@@ -44,6 +44,7 @@ class AttendanceRecapRepository {
         "npp": npp,
         "year": year.toString(),
         "month": month.toString().padLeft(2, '0'),
+        "timestamp": DateTime.now().millisecondsSinceEpoch.toString(),
       };
       print('Request body: $requestBody');
 
@@ -52,6 +53,9 @@ class AttendanceRecapRepository {
         headers: {
           'Content-Type': 'application/json; charset=UTF-8',
           'Authorization': 'Bearer $token',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
         },
         body: jsonEncode(requestBody),
       ).timeout(const Duration(seconds: 30));
@@ -64,6 +68,16 @@ class AttendanceRecapRepository {
         final List<dynamic> jsonList = jsonDecode(response.body);
         print('Parsed JSON list length: ${jsonList.length}');
         print('First record: ${jsonList.isNotEmpty ? jsonList.first : "No records"}');
+        
+        // Debug: Print all dates in the response
+        if (jsonList.isNotEmpty) {
+          print('All dates in response:');
+          for (int i = 0; i < jsonList.length && i < 5; i++) {
+            final record = jsonList[i];
+            print('  Record $i: ${record['tanggal']} - ${record['jam_masuk']} - ${record['jam_keluar']}');
+          }
+        }
+        
         return {'success': true, 'records': jsonList};
       } else {
         print('Request failed with status: ${response.statusCode}');

@@ -25,7 +25,9 @@ import 'package:quickalert/quickalert.dart';
 import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import '../widgets/custom_alert.dart';
+import '../widgets/security_alert.dart';
 import '../services/attendance_service.dart';
+import '../services/security_service.dart';
 
 void main() => runApp(const Presence());
 
@@ -72,6 +74,7 @@ class _PresenceState extends State<Presence> {
   String? _jamPulang;
 
   final _attendanceService = AttendanceService();
+  final _securityService = SecurityService();
 
   void initState() {
     super.initState();
@@ -104,6 +107,7 @@ class _PresenceState extends State<Presence> {
     });
 
     _loadAttendanceData();
+    _performSecurityCheck();
   }
 
   Future<void> initializePreference() async {
@@ -183,6 +187,22 @@ class _PresenceState extends State<Presence> {
 
   void _checkRadius(String type) async {
     try {
+      // Perform security check before attendance
+      final securityResult = await _securityService.performSecurityCheck();
+      if (!securityResult.isSecure) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => SecurityAlert(
+            title: 'Absensi Diblokir',
+            message: 'Absensi tidak dapat dilakukan karena perangkat tidak memenuhi persyaratan keamanan.',
+            violations: securityResult.violations,
+            canDismiss: true,
+          ),
+        );
+        return;
+      }
+
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -594,6 +614,53 @@ class _PresenceState extends State<Presence> {
     }
   }
 
+  Future<void> _performSecurityCheck() async {
+    try {
+      print('Performing security check...');
+      final securityResult = await _securityService.performSecurityCheck();
+      
+      if (!securityResult.isSecure) {
+        print('Security violations detected: ${securityResult.violations}');
+        
+        if (mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => SecurityAlert(
+              title: 'Peringatan Keamanan',
+              message: 'Aplikasi tidak dapat digunakan karena perangkat tidak memenuhi persyaratan keamanan.',
+              violations: securityResult.violations,
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Exit the app or navigate back to login
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => Login()),
+                );
+              },
+            ),
+          );
+        }
+      } else {
+        print('Security check passed: Device is secure');
+      }
+    } catch (e) {
+      print('Security check error: $e');
+      // In case of error, show warning but allow usage
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => CustomAlert(
+            title: 'Peringatan',
+            message: 'Tidak dapat memverifikasi keamanan perangkat. Pastikan perangkat Anda memenuhi persyaratan keamanan.',
+            icon: Icons.warning,
+            iconColor: Colors.orange,
+          ),
+        );
+      }
+    }
+  }
+
   void signOut() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     prefs.clear();
@@ -674,7 +741,7 @@ class _PresenceState extends State<Presence> {
       print('Error zooming to office: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not zoom to office location.'),
+          content: Text('Tidak dapat memperbesar ke lokasi kantor.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -932,142 +999,133 @@ class _PresenceState extends State<Presence> {
                         ),
                         // Absen Masuk/Pulang Status
                         Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16),
+                          padding: EdgeInsets.symmetric(horizontal: 12),
                           child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               // Absen Masuk
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 50,
-                                        height: 50,
-                                        decoration: BoxDecoration(
+                              Expanded(
+                                flex: 1,
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 45,
+                                      height: 45,
+                                      decoration: BoxDecoration(
+                                        color: _jamMasuk != '--:--'
+                                            ? Color.fromRGBO(1, 101, 65, 0.1)
+                                            : Colors.red[100],
+                                        borderRadius:
+                                            BorderRadius.circular(10),
+                                      ),
+                                      child: Center(
+                                        child: Icon(
+                                          _jamMasuk != '--:--'
+                                              ? FluentIcons
+                                                  .checkmark_circle_48_regular
+                                              : FluentIcons.dismiss_24_filled,
                                           color: _jamMasuk != '--:--'
-                                              ? Color.fromRGBO(1, 101, 65, 0.1)
-                                              : Colors.red[100],
-                                          borderRadius:
-                                              BorderRadius.circular(10),
-                                        ),
-                                        child: Center(
-                                          child: Icon(
-                                            _jamMasuk != '--:--'
-                                                ? FluentIcons
-                                                    .checkmark_circle_48_regular
-                                                : FluentIcons.dismiss_24_filled,
-                                            color: _jamMasuk != '--:--'
-                                                ? Color.fromRGBO(1, 101, 65, 1)
-                                                : Colors.red,
-                                            size: 24,
-                                          ),
+                                              ? Color.fromRGBO(1, 101, 65, 1)
+                                              : Colors.red,
+                                          size: 20,
                                         ),
                                       ),
-                                      SizedBox(width: 12),
-                                      Column(
+                                    ),
+                                    SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
                                         crossAxisAlignment:
-                                            CrossAxisAlignment.center,
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             'Absen Masuk',
                                             style: TextStyle(
                                               color: Colors.grey[700],
-                                              fontSize: 13,
+                                              fontSize: 12,
                                               fontWeight: FontWeight.w600,
                                             ),
                                           ),
-                                          SizedBox(height: 4),
-                                          Container(
-                                            width: 60,
-                                            child: Text(
-                                              _jamMasuk ?? '--:--',
-                                              textAlign: TextAlign.center,
-                                              style: TextStyle(
-                                                color: Colors.grey[400],
-                                                fontSize: 14,
-                                                fontFamily: 'Poppins',
-                                                fontWeight: FontWeight.w500,
-                                              ),
+                                          SizedBox(height: 2),
+                                          Text(
+                                            _jamMasuk ?? '--:--',
+                                            style: TextStyle(
+                                              color: Colors.grey[400],
+                                              fontSize: 13,
+                                              fontFamily: 'Poppins',
+                                              fontWeight: FontWeight.w500,
                                             ),
                                           ),
                                         ],
                                       ),
-                                    ],
-                                  ),
-                                ],
+                                    ),
+                                  ],
+                                ),
                               ),
                               // Center Icon
                               Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 16),
+                                padding: EdgeInsets.symmetric(horizontal: 8),
                                 child: Icon(
                                   Icons.calendar_month_sharp,
                                   color: Colors.grey[700],
-                                  size: 24,
+                                  size: 20,
                                 ),
                               ),
                               // Absen Pulang
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Column(
+                              Expanded(
+                                flex: 1,
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
                                         crossAxisAlignment:
-                                            CrossAxisAlignment.center,
+                                            CrossAxisAlignment.end,
                                         children: [
                                           Text(
                                             'Absen Pulang',
                                             style: TextStyle(
                                               color: Colors.grey[700],
-                                              fontSize: 13,
+                                              fontSize: 12,
                                               fontWeight: FontWeight.w600,
                                             ),
                                           ),
-                                          SizedBox(height: 4),
-                                          Container(
-                                            width: 60,
-                                            child: Text(
-                                              _jamPulang ?? '--:--',
-                                              textAlign: TextAlign.center,
-                                              style: TextStyle(
-                                                color: Colors.grey[400],
-                                                fontSize: 14,
-                                                fontFamily: 'Poppins',
-                                                fontWeight: FontWeight.w500,
-                                              ),
+                                          SizedBox(height: 2),
+                                          Text(
+                                            _jamPulang ?? '--:--',
+                                            style: TextStyle(
+                                              color: Colors.grey[400],
+                                              fontSize: 13,
+                                              fontFamily: 'Poppins',
+                                              fontWeight: FontWeight.w500,
                                             ),
                                           ),
                                         ],
                                       ),
-                                      SizedBox(width: 12),
-                                      Container(
-                                        width: 50,
-                                        height: 50,
-                                        decoration: BoxDecoration(
+                                    ),
+                                    SizedBox(width: 8),
+                                    Container(
+                                      width: 45,
+                                      height: 45,
+                                      decoration: BoxDecoration(
+                                        color: _jamPulang != '--:--'
+                                            ? Color.fromRGBO(1, 101, 65, 0.1)
+                                            : Colors.red[100],
+                                        borderRadius:
+                                            BorderRadius.circular(10),
+                                      ),
+                                      child: Center(
+                                        child: Icon(
+                                          _jamPulang != '--:--'
+                                              ? FluentIcons
+                                                  .checkmark_circle_48_regular
+                                              : FluentIcons.dismiss_24_filled,
                                           color: _jamPulang != '--:--'
-                                              ? Color.fromRGBO(1, 101, 65, 0.1)
-                                              : Colors.red[100],
-                                          borderRadius:
-                                              BorderRadius.circular(10),
-                                        ),
-                                        child: Center(
-                                          child: Icon(
-                                            _jamPulang != '--:--'
-                                                ? FluentIcons
-                                                    .checkmark_circle_48_regular
-                                                : FluentIcons.dismiss_24_filled,
-                                            color: _jamPulang != '--:--'
-                                                ? Color.fromRGBO(1, 101, 65, 1)
-                                                : Colors.red,
-                                            size: 24,
-                                          ),
+                                              ? Color.fromRGBO(1, 101, 65, 1)
+                                              : Colors.red,
+                                          size: 20,
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                ],
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
@@ -1190,7 +1248,9 @@ class _PresenceState extends State<Presence> {
                                           children: [
                                             Flexible(
                                               child: Text(
-                                                'Geser untuk Absen Masuk',
+                                                _selectedOption == 'Absen Masuk' 
+                                                    ? 'Geser untuk Absen Masuk'
+                                                    : 'Geser untuk Absen Pulang',
                                                 style: TextStyle(
                                                   color: Colors.white,
                                                   fontSize: 14,
@@ -1352,7 +1412,7 @@ class _PresenceState extends State<Presence> {
                                     SizedBox(width: 48),
                                     Expanded(
                                       child: Text(
-                                        'Select an option above',
+                                        'Pilih opsi di atas',
                                         textAlign: TextAlign.center,
                                         style: TextStyle(
                                           color: Colors.white,

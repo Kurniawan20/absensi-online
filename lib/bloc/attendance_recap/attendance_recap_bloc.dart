@@ -19,6 +19,7 @@ class AttendanceRecapBloc
     Emitter<AttendanceRecapState> emit,
   ) async {
     try {
+      print('AttendanceRecapBloc: Loading attendance history for NPP: ${event.npp}, Year: ${event.year}, Month: ${event.month}');
       emit(AttendanceRecapLoading());
 
       final result = await repository.getAttendanceHistory(
@@ -27,13 +28,21 @@ class AttendanceRecapBloc
         month: event.month,
       );
 
+      print('AttendanceRecapBloc: Repository result: $result');
+
       if (result['success']) {
-        final List<AttendanceRecord> records = result['records'];
+        final List<dynamic> jsonList = result['records'];
+        final List<AttendanceRecord> records = jsonList
+            .map((json) => AttendanceRecord.fromJson(json))
+            .toList();
+        print('AttendanceRecapBloc: Loaded ${records.length} records');
         emit(AttendanceRecapLoaded(records: records));
       } else {
+        print('AttendanceRecapBloc: Error from repository: ${result['error']}');
         emit(AttendanceRecapError(message: result['error']));
       }
     } catch (e) {
+      print('AttendanceRecapBloc: Exception: $e');
       emit(AttendanceRecapError(message: e.toString()));
     }
   }

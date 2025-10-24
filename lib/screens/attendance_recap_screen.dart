@@ -7,8 +7,141 @@ import '../bloc/attendance_recap/attendance_recap_event.dart';
 import '../bloc/attendance_recap/attendance_recap_state.dart';
 import '../models/attendance_record.dart';
 import 'package:intl/intl.dart';
+import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 import 'home_page.dart';
 import 'page_rekap_absensi.dart';
+
+class MonthYearPicker extends StatefulWidget {
+  final int initialYear;
+  final int initialMonth;
+  final Function(int year, int month) onChanged;
+
+  const MonthYearPicker({
+    Key? key,
+    required this.initialYear,
+    required this.initialMonth,
+    required this.onChanged,
+  }) : super(key: key);
+
+  @override
+  _MonthYearPickerState createState() => _MonthYearPickerState();
+}
+
+class _MonthYearPickerState extends State<MonthYearPicker> {
+  late int selectedYear;
+  late int selectedMonth;
+  
+  final List<String> months = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    selectedYear = widget.initialYear;
+    selectedMonth = widget.initialMonth;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Year Selector
+        Container(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                onPressed: selectedYear > 2020 ? () {
+                  setState(() {
+                    selectedYear--;
+                    widget.onChanged(selectedYear, selectedMonth);
+                  });
+                } : null,
+                icon: Icon(Icons.chevron_left),
+              ),
+              Text(
+                selectedYear.toString(),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Color.fromRGBO(1, 101, 65, 1),
+                ),
+              ),
+              IconButton(
+                onPressed: selectedYear < DateTime.now().year ? () {
+                  setState(() {
+                    selectedYear++;
+                    widget.onChanged(selectedYear, selectedMonth);
+                  });
+                } : null,
+                icon: Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
+        ),
+        Divider(),
+        // Month Grid
+        Expanded(
+          child: GridView.builder(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              childAspectRatio: 2.5,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+            ),
+            itemCount: 12,
+            itemBuilder: (context, index) {
+              final monthIndex = index + 1;
+              final isSelected = monthIndex == selectedMonth;
+              final isCurrentMonth = selectedYear == DateTime.now().year && 
+                                   monthIndex == DateTime.now().month;
+              final isFutureMonth = selectedYear == DateTime.now().year && 
+                                   monthIndex > DateTime.now().month;
+              
+              return InkWell(
+                onTap: isFutureMonth ? null : () {
+                  setState(() {
+                    selectedMonth = monthIndex;
+                    widget.onChanged(selectedYear, selectedMonth);
+                  });
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isSelected 
+                        ? Color.fromRGBO(1, 101, 65, 1)
+                        : (isCurrentMonth ? Color.fromRGBO(1, 101, 65, 0.1) : Colors.transparent),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isSelected 
+                          ? Color.fromRGBO(1, 101, 65, 1)
+                          : Colors.grey.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      months[index],
+                      style: TextStyle(
+                        color: isSelected 
+                            ? Colors.white
+                            : (isFutureMonth ? Colors.grey[400] : Colors.black87),
+                        fontSize: 12,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class AttendanceRecapScreen extends StatefulWidget {
   const AttendanceRecapScreen({Key? key}) : super(key: key);
@@ -42,6 +175,7 @@ class _AttendanceRecapScreenState extends State<AttendanceRecapScreen> {
 
   void _loadAttendanceData() {
     if (npp != null) {
+      print('AttendanceRecapScreen: Loading data for NPP: $npp, Year: $selectedYear, Month: $selectedMonth');
       context.read<AttendanceRecapBloc>().add(
             LoadAttendanceHistory(
               npp: npp!,
@@ -49,6 +183,8 @@ class _AttendanceRecapScreenState extends State<AttendanceRecapScreen> {
               month: int.parse(selectedMonth),
             ),
           );
+    } else {
+      print('AttendanceRecapScreen: NPP is null, cannot load data');
     }
   }
 
@@ -75,7 +211,20 @@ class _AttendanceRecapScreenState extends State<AttendanceRecapScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Attendance Recap'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Attendance Recap'),
+            Text(
+              '${DateFormat('MMMM yyyy').format(DateTime(int.parse(selectedYear), int.parse(selectedMonth)))}',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+                color: Colors.white.withOpacity(0.9),
+              ),
+            ),
+          ],
+        ),
         backgroundColor: const Color.fromRGBO(1, 101, 65, 1),
         leading: IconButton(
           icon: const Icon(FluentIcons.arrow_left_24_regular),
@@ -160,6 +309,12 @@ class _AttendanceRecapScreenState extends State<AttendanceRecapScreen> {
   }
 
   Widget _buildAttendanceList(List<AttendanceRecord> records) {
+    print('Building attendance list with ${records.length} records for $selectedYear-$selectedMonth');
+    if (records.isNotEmpty) {
+      print('First record date: ${records.first.date}');
+      print('Last record date: ${records.last.date}');
+    }
+    
     return ListView.builder(
       itemCount: records.length,
       itemBuilder: (context, index) {
@@ -187,21 +342,71 @@ class _AttendanceRecapScreenState extends State<AttendanceRecapScreen> {
   }
 
   Future<void> _showMonthYearPicker(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
+    // Initialize with current selected values
+    DateTime? selectedDate = DateTime(int.parse(selectedYear), int.parse(selectedMonth));
+    
+    await showDialog<DateTime>(
       context: context,
-      initialDate: DateTime(int.parse(selectedYear), int.parse(selectedMonth)),
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      initialDatePickerMode: DatePickerMode.year,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(
+            'Pilih Bulan dan Tahun',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+          ),
+          content: Container(
+            height: 300,
+            width: 300,
+            child: MonthYearPicker(
+              initialYear: int.parse(selectedYear),
+              initialMonth: int.parse(selectedMonth),
+              onChanged: (year, month) {
+                selectedDate = DateTime(year, month);
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Batal',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                if (selectedDate != null) {
+                  final newYear = selectedDate!.year.toString();
+                  final newMonth = selectedDate!.month.toString().padLeft(2, '0');
+                  
+                  // Only update and reload if the selection actually changed
+                  if (newYear != selectedYear || newMonth != selectedMonth) {
+                    print('Month selection changed from $selectedYear-$selectedMonth to $newYear-$newMonth');
+                    setState(() {
+                      selectedYear = newYear;
+                      selectedMonth = newMonth;
+                    });
+                    print('Loading data for: Year=$selectedYear, Month=$selectedMonth');
+                    _loadAttendanceData();
+                  } else {
+                    print('Month selection unchanged: $selectedYear-$selectedMonth');
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Color.fromRGBO(1, 101, 65, 1),
+                foregroundColor: Colors.white,
+              ),
+              child: Text('Pilih'),
+            ),
+          ],
+        );
+      },
     );
-
-    if (picked != null) {
-      setState(() {
-        selectedYear = picked.year.toString();
-        selectedMonth = picked.month.toString().padLeft(2, '0');
-      });
-      _loadAttendanceData();
-    }
   }
 
   Future<void> _showReportOptions(BuildContext context) async {

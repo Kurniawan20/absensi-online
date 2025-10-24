@@ -93,25 +93,7 @@ class _HomeScreenState extends State<HomePage>
     }
   }
 
-  // Sample announcement data
-  final List<Map<String, String>> announcements = [
-    {
-      'title': 'Notice of position promotion for "Marsha Lenathea"',
-      'subtitle': 'from Jr. UI/UX Designer becomes Sr. UI/UX Designer',
-      'sender': 'Kimberly Violon',
-      'role': 'Head of HR',
-      'attachment': 'Promotion Letter Sr. UI/UX Designer.pdf',
-      'avatar': 'assets/images/avatar_hr.jpg',
-    },
-    {
-      'title': 'Notice of position promotion for "Shania Gracia"',
-      'subtitle': 'from Jr. Mobile Developer becomes Sr. Mobile Developer',
-      'sender': 'Georgina Collaby',
-      'role': 'HR Management',
-      'attachment': 'Promotion Letter Sr. Mobile Developer.pdf',
-      'avatar': 'assets/images/avatar_hr2.jpg',
-    },
-  ];
+  // Announcements feature - coming soon
 
   @override
   void initState() {
@@ -494,6 +476,7 @@ class _HomeScreenState extends State<HomePage>
                           label: 'Gaji Saya',
                           color: const Color(0xFFE65100), // Dark Orange
                           onTap: () {},
+                          isDisabled: true,
                         ),
                         _buildQuickAction(
                           icon: FluentIcons
@@ -508,6 +491,7 @@ class _HomeScreenState extends State<HomePage>
                           label: 'Izin',
                           color: const Color(0xFF1565C0), // Dark Blue
                           onTap: () {},
+                          isDisabled: true,
                         ),
                         _buildQuickAction(
                           icon: FluentIcons
@@ -515,6 +499,7 @@ class _HomeScreenState extends State<HomePage>
                           label: 'Persetujuan',
                           color: const Color(0xFFC62828), // Dark Red
                           onTap: () {},
+                          isDisabled: true,
                         ),
                       ],
                     ),
@@ -524,176 +509,64 @@ class _HomeScreenState extends State<HomePage>
                 // Office Announcement Section
                 Container(
                   decoration: const BoxDecoration(
-                    color: Colors.white,  // Changed back to white
+                    color: Colors.white,
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Header
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Pengumuman Kantor',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.black,
-                                fontFamily: 'Poppins',
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const AnnouncementListPage(),
-                                  ),
-                                );
-                              },
-                              child: const Text(
-                                'Lihat Semua',
-                                style: TextStyle(
-                                  color: Color.fromRGBO(1, 101, 65, 1),
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  fontFamily: 'Poppins',
-                                ),
-                              ),
-                            ),
-                          ],
+                        const Text(
+                          'Pengumuman Kantor',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black,
+                            fontFamily: 'Poppins',
+                          ),
                         ),
-                        const SizedBox(height: 16),
-                        // Announcement Cards in ScrollView
-                        SizedBox(
-                          height: 300, // Fixed height for scroll view
-                          child: ListView.builder(
-                            padding: EdgeInsets.zero,
-                            itemCount: announcements.length,
-                            itemBuilder: (context, index) => Card(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              elevation: 0,
-                              color: Colors.white,  // Explicit white background for card
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                side: BorderSide(
-                                  color: Colors.grey.shade200,
-                                  width: 1,
-                                ),
-                              ),
-                              child: InkWell(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => AnnouncementDetailPage(
-                                        announcement: announcements[index],
-                                      ),
-                                    ),
-                                  );
-                                },
-                                borderRadius: BorderRadius.circular(12),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // Header with avatar
-                                      Row(
-                                        children: [
-                                          CircleAvatar(
-                                            radius: 20,
-                                            backgroundImage: AssetImage(
-                                              announcements[index]['avatar']!,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  announcements[index]['sender']!,
-                                                  style: const TextStyle(
-                                                    fontFamily: 'Poppins',
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                                Text(
-                                                  announcements[index]['role']!,
-                                                  style: TextStyle(
-                                                    fontFamily: 'Poppins',
-                                                    fontSize: 12,
-                                                    color: Colors.grey[600],
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 16),
-                                      // Announcement content
-                                      Text(
-                                        announcements[index]['title']!,
-                                        style: const TextStyle(
-                                          fontFamily: 'Poppins',
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        announcements[index]['subtitle']!,
-                                        style: TextStyle(
-                                          fontFamily: 'Poppins',
-                                          fontSize: 13,
-                                          color: Colors.grey[600],
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      // Attachment
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 8,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey[100],
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              FluentIcons.document_pdf_24_regular,
-                                              size: 20,
-                                              color: Colors.grey[700],
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Flexible(
-                                              child: Text(
-                                                announcements[index]['attachment']!,
-                                                style: TextStyle(
-                                                  fontFamily: 'Poppins',
-                                                  fontSize: 12,
-                                                  color: Colors.grey[700],
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                        const SizedBox(height: 24),
+                        // Coming Soon Message
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(32),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Colors.grey[200]!,
+                              width: 1,
                             ),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                FluentIcons.megaphone_24_regular,
+                                size: 48,
+                                color: Colors.grey[400],
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Fitur Segera Hadir',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Pengumuman kantor akan tersedia dalam pembaruan mendatang',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -776,16 +649,20 @@ class _HomeScreenState extends State<HomePage>
     required String label,
     required Color color,
     required VoidCallback onTap,
+    bool isDisabled = false,
   }) {
+    final effectiveColor = isDisabled ? Colors.grey[400]! : color;
+    final effectiveTextColor = isDisabled ? Colors.grey[500]! : Colors.grey[800]!;
+    
     return InkWell(
-      onTap: () {
+      onTap: isDisabled ? null : () {
         // Add haptic feedback for better interaction
         HapticFeedback.lightImpact();
         onTap();
       },
       borderRadius: BorderRadius.circular(12),
-      splashColor: color.withOpacity(0.1),
-      highlightColor: color.withOpacity(0.05),
+      splashColor: isDisabled ? Colors.transparent : color.withOpacity(0.1),
+      highlightColor: isDisabled ? Colors.transparent : color.withOpacity(0.05),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
         child: TweenAnimationBuilder<double>(
@@ -800,12 +677,12 @@ class _HomeScreenState extends State<HomePage>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: color.withOpacity(0.1),
+                      color: effectiveColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
                       icon,
-                      color: color,
+                      color: effectiveColor,
                       size: 24,
                     ),
                   ),
@@ -815,7 +692,7 @@ class _HomeScreenState extends State<HomePage>
                     style: TextStyle(
                       fontFamily: 'Poppins',
                       fontSize: 12,
-                      color: Colors.grey[800],
+                      color: effectiveTextColor,
                       fontWeight: FontWeight.w500,
                     ),
                   ),

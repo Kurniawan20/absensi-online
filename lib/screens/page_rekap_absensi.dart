@@ -11,6 +11,140 @@ import 'Apis.dart';
 import 'home_page.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 
+class MonthYearPickerWidget extends StatefulWidget {
+  final int initialYear;
+  final int initialMonth;
+  final Color primaryColor;
+  final Function(int year, int month) onChanged;
+
+  const MonthYearPickerWidget({
+    Key? key,
+    required this.initialYear,
+    required this.initialMonth,
+    required this.primaryColor,
+    required this.onChanged,
+  }) : super(key: key);
+
+  @override
+  _MonthYearPickerWidgetState createState() => _MonthYearPickerWidgetState();
+}
+
+class _MonthYearPickerWidgetState extends State<MonthYearPickerWidget> {
+  late int selectedYear;
+  late int selectedMonth;
+  
+  final List<String> months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    selectedYear = widget.initialYear;
+    selectedMonth = widget.initialMonth;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Year Selector
+        Container(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                onPressed: selectedYear > 2020 ? () {
+                  setState(() {
+                    selectedYear--;
+                    widget.onChanged(selectedYear, selectedMonth);
+                  });
+                } : null,
+                icon: Icon(Icons.chevron_left, color: widget.primaryColor),
+              ),
+              Text(
+                selectedYear.toString(),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: widget.primaryColor,
+                ),
+              ),
+              IconButton(
+                onPressed: selectedYear < DateTime.now().year ? () {
+                  setState(() {
+                    selectedYear++;
+                    widget.onChanged(selectedYear, selectedMonth);
+                  });
+                } : null,
+                icon: Icon(Icons.chevron_right, color: widget.primaryColor),
+              ),
+            ],
+          ),
+        ),
+        Divider(),
+        // Month Grid
+        Expanded(
+          child: GridView.builder(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              childAspectRatio: 2.5,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+            ),
+            itemCount: 12,
+            itemBuilder: (context, index) {
+              final monthIndex = index + 1;
+              final isSelected = monthIndex == selectedMonth;
+              final isCurrentMonth = selectedYear == DateTime.now().year && 
+                                   monthIndex == DateTime.now().month;
+              final isFutureMonth = selectedYear == DateTime.now().year && 
+                                   monthIndex > DateTime.now().month;
+              
+              return InkWell(
+                onTap: isFutureMonth ? null : () {
+                  setState(() {
+                    selectedMonth = monthIndex;
+                    widget.onChanged(selectedYear, selectedMonth);
+                  });
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isSelected 
+                        ? widget.primaryColor
+                        : (isCurrentMonth ? widget.primaryColor.withOpacity(0.1) : Colors.transparent),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isSelected 
+                          ? widget.primaryColor
+                          : Colors.grey.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      months[index],
+                      style: TextStyle(
+                        color: isSelected 
+                            ? Colors.white
+                            : (isFutureMonth ? Colors.grey[400] : Colors.black87),
+                        fontSize: 12,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class RekapAbsensi extends StatefulWidget {
   final String id;
   const RekapAbsensi({Key? key, required this.id}) : super(key: key);
@@ -40,8 +174,6 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
   List<Data> data = [];
   List<Data> _paginatedData = [];
   bool _isLoadingOverlay = false;
-  int _itemsPerPage = 10;
-  int _currentPage = 1;
   late DateTimeRange _dateRange;
   String _selectedFilter = 'All';
   final List<String> _filters = ['All', 'On Time', 'Overdue'];
@@ -95,25 +227,24 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    // Initialize with current month only
     _dateRange = DateTimeRange(
-      start: DateTime.now().subtract(const Duration(days: 30)),
-      end: DateTime.now(),
+      start: DateTime(now.year, now.month, 1),
+      end: DateTime(now.year, now.month, 1),
     );
+    print('RekapAbsensi: Initializing with month ${now.month}/${now.year}');
     _fetchData(
-      _dateRange.start.year.toString(),
-      _dateRange.start.month.toString().padLeft(2, '0'),
-      _dateRange.end.year.toString(),
-      _dateRange.end.month.toString().padLeft(2, '0'),
+      now.year.toString(),
+      now.month.toString().padLeft(2, '0'),
+      now.year.toString(),
+      now.month.toString().padLeft(2, '0'),
     );
   }
 
   void _updatePaginatedData() {
-    final startIndex = (_currentPage - 1) * _itemsPerPage;
-    final endIndex = startIndex + _itemsPerPage;
-    _paginatedData = data.sublist(
-      startIndex,
-      endIndex > data.length ? data.length : endIndex,
-    );
+    // Show all data instead of paginating
+    _paginatedData = data;
   }
 
   List<Data> _getFilteredData() {
@@ -180,11 +311,12 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
       String endMonth) async {
     if (!mounted) return;
 
+    print('RekapAbsensi: _fetchData called with startYear=$startYear, startMonth=$startMonth, endYear=$endYear, endMonth=$endMonth');
+
     setState(() {
       _isLoadingOverlay = true;
       data = [];
       _paginatedData = [];
-      _currentPage = 1;
     });
 
     try {
@@ -194,29 +326,49 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
       }
 
       final url = Uri.parse('${ApiConstants.BASE_URL}/getabsen');
+      final requestBody = {
+        "npp": widget.id,
+        "year": startYear,
+        "month": startMonth,
+        "timestamp": DateTime.now().millisecondsSinceEpoch.toString(),
+      };
+      
+      print('RekapAbsensi: API Request URL: $url');
+      print('RekapAbsensi: Request Body: $requestBody');
+      
       final response = await http
           .post(
             url,
             headers: {
               'Content-Type': 'application/json; charset=UTF-8',
               'Authorization': 'Bearer $token',
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0',
             },
-            body: jsonEncode({
-              "npp": widget.id,
-              "start_year": startYear,
-              "start_month": startMonth,
-              "end_year": endYear,
-              "end_month": endMonth
-            }),
+            body: jsonEncode(requestBody),
           )
           .timeout(const Duration(seconds: 15));
 
       if (!mounted) return;
 
+      print('RekapAbsensi: Response Status: ${response.statusCode}');
+      print('RekapAbsensi: Response Headers: ${response.headers}');
+      print('RekapAbsensi: Response Body: ${response.body}');
+
       if (response.statusCode == 200) {
         final jsonResponse = json.decode(response.body);
         if (jsonResponse == null) {
           throw Exception('Empty response from server');
+        }
+        
+        print('RekapAbsensi: Parsed JSON Response Length: ${(jsonResponse as List).length}');
+        if ((jsonResponse as List).isNotEmpty) {
+          print('RekapAbsensi: First 3 records:');
+          for (int i = 0; i < (jsonResponse as List).length && i < 3; i++) {
+            final record = (jsonResponse as List)[i];
+            print('  Record $i: ${record['tanggal']} - ${record['jam_masuk']} - ${record['jam_keluar']}');
+          }
         }
 
         setState(() {
@@ -254,232 +406,76 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
   }
 
   Future<void> _selectDateRange(BuildContext context) async {
-    final DateTimeRange? picked = await showModalBottomSheet<DateTimeRange>(
+    // Initialize with current selected values
+    DateTime? selectedDate = _dateRange.start;
+    
+    await showDialog<DateTime>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(28),
-          topRight: Radius.circular(28),
-        ),
-      ),
       builder: (BuildContext context) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.7,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(28),
-              topRight: Radius.circular(28),
+        return AlertDialog(
+          title: Text(
+            'Pilih Bulan dan Tahun',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
             ),
           ),
-          child: Column(
-            children: [
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Pilih Tanggal',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Theme(
-                  data: Theme.of(context).copyWith(
-                    colorScheme: Theme.of(context).colorScheme.copyWith(
-                          surface: Colors.white,
-                          background: Colors.white,
-                        ),
-                  ),
-                  child: SfDateRangePicker(
-                    view: DateRangePickerView.month,
-                    selectionMode: DateRangePickerSelectionMode.range,
-                    initialSelectedRange: PickerDateRange(
-                      _dateRange.start,
-                      _dateRange.end,
-                    ),
-                    minDate: DateTime(2020),
-                    maxDate: DateTime.now(),
-                    headerStyle: DateRangePickerHeaderStyle(
-                      textStyle: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                      textAlign: TextAlign.left,
-                      backgroundColor: Colors.white,
-                    ),
-                    monthCellStyle: DateRangePickerMonthCellStyle(
-                      textStyle: TextStyle(
-                        color: Colors.black87,
-                        fontSize: 14,
-                        fontWeight: FontWeight.normal,
-                      ),
-                      disabledDatesTextStyle: TextStyle(
-                        color: Colors.grey[300],
-                        fontSize: 14,
-                      ),
-                      todayTextStyle: TextStyle(
-                        color: _primaryColor,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      leadingDatesTextStyle: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 14,
-                      ),
-                      trailingDatesTextStyle: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 14,
-                      ),
-                      weekendTextStyle: TextStyle(
-                        color: Colors.red[300],
-                        fontSize: 14,
-                        fontWeight: FontWeight.normal,
-                      ),
-                      cellDecoration: BoxDecoration(
-                        color: Colors.white,
-                      ),
-                      todayCellDecoration: BoxDecoration(
-                        color: Colors.white,
-                        border: Border.all(
-                          color: _primaryColor,
-                          width: 1,
-                        ),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    monthViewSettings: DateRangePickerMonthViewSettings(
-                      firstDayOfWeek: 1,
-                      viewHeaderHeight: 40,
-                      viewHeaderStyle: DateRangePickerViewHeaderStyle(
-                        textStyle: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                      dayFormat: 'EEE',
-                      weekendDays: const [6, 7], // Saturday = 6, Sunday = 7
-                    ),
-                    selectionRadius: 20,
-                    rangeSelectionColor: _primaryColor.withOpacity(0.1),
-                    rangeTextStyle: TextStyle(
-                      color: _primaryColor,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                    selectionTextStyle: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
-                    startRangeSelectionColor: _primaryColor,
-                    endRangeSelectionColor: _primaryColor,
-                    todayHighlightColor: _primaryColor,
-                    backgroundColor: Colors.white,
-                    onSelectionChanged:
-                        (DateRangePickerSelectionChangedArgs args) {
-                      if (args.value is PickerDateRange &&
-                          args.value.startDate != null) {
-                        final startDate = args.value.startDate!;
-                        final endDate = args.value.endDate ?? startDate;
-                        setState(() {
-                          _dateRange = DateTimeRange(
-                            start: startDate,
-                            end: endDate,
-                          );
-                        });
-                      }
-                    },
-                  ),
-                ),
-              ),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: Text(
-                            'Cancel',
-                            style: TextStyle(
-                              color: Colors.grey[700],
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              side: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            backgroundColor: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.pop(context, _dateRange);
-                          },
-                          child: Text(
-                            'Submit',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.white,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _primaryColor,
-                            padding: EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            elevation: 0,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: MediaQuery.of(context).padding.bottom),
-            ],
+          content: Container(
+            height: 300,
+            width: 300,
+            child: MonthYearPickerWidget(
+              initialYear: _dateRange.start.year,
+              initialMonth: _dateRange.start.month,
+              primaryColor: _primaryColor,
+              onChanged: (year, month) {
+                selectedDate = DateTime(year, month);
+              },
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Batal',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                if (selectedDate != null) {
+                  final newYear = selectedDate!.year;
+                  final newMonth = selectedDate!.month;
+                  
+                  // Only update and reload if the selection actually changed
+                  if (newYear != _dateRange.start.year || newMonth != _dateRange.start.month) {
+                    setState(() {
+                      _dateRange = DateTimeRange(
+                        start: selectedDate!,
+                        end: selectedDate!,
+                      );
+                    });
+                    print('Loading data for: Year=$newYear, Month=$newMonth');
+                    _fetchData(
+                      newYear.toString(),
+                      newMonth.toString().padLeft(2, '0'),
+                      newYear.toString(),
+                      newMonth.toString().padLeft(2, '0'),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryColor,
+                foregroundColor: Colors.white,
+              ),
+              child: Text('Pilih'),
+            ),
+          ],
         );
       },
     );
-
-    if (picked != null && picked != _dateRange) {
-      setState(() {
-        _dateRange = picked;
-      });
-      await _fetchData(
-        _dateRange.start.year.toString(),
-        _dateRange.start.month.toString().padLeft(2, '0'),
-        _dateRange.end.year.toString(),
-        _dateRange.end.month.toString().padLeft(2, '0'),
-      );
-    }
   }
 
   @override
@@ -493,10 +489,13 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
         toolbarHeight: 80, // Increased height
         flexibleSpace: Container(
           decoration: BoxDecoration(
-            image: DecorationImage(
-              image: AssetImage('assets/images/pattern.png'),
-              fit: BoxFit.cover,
-              opacity: 0.1,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color.fromRGBO(1, 101, 65, 1),
+                Color.fromRGBO(1, 101, 65, 0.8),
+              ],
             ),
           ),
         ),
@@ -511,13 +510,26 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
         ),
         title: Padding(
           padding: EdgeInsets.only(top: 8), // Add some top padding to the title
-          child: Text(
-            'Absence Management',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                'Absence Management',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                '${DateFormat('MMMM yyyy').format(_dateRange.start)}',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.9),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -643,15 +655,26 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                 child: Row(
                   children: _filters.map((filter) {
                     final isSelected = _selectedFilter == filter;
-                    final count = filter == 'All'
-                        ? _getFilteredData().length.toString()
-                        : _getFilteredData()
-                            .where((item) {
-                              final isOnTime = _isOnTime(item.id);
-                              return filter == 'On Time' ? isOnTime : !isOnTime;
-                            })
-                            .length
-                            .toString();
+                    // Calculate count based on filter only (ignore current search)
+                    final count = _paginatedData
+                        .where((item) {
+                          // Apply search filter if there's a search query
+                          bool matchesSearch = true;
+                          if (_searchQuery.isNotEmpty) {
+                            matchesSearch = item.userId.toLowerCase().contains(_searchQuery.toLowerCase());
+                          }
+                          
+                          // Apply tab filter
+                          bool matchesFilter = true;
+                          if (filter != 'All') {
+                            final isOnTime = _isOnTime(item.id);
+                            matchesFilter = filter == 'On Time' ? isOnTime : !isOnTime;
+                          }
+                          
+                          return matchesSearch && matchesFilter;
+                        })
+                        .length
+                        .toString();
 
                     return Expanded(
                       child: GestureDetector(

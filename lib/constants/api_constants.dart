@@ -1,7 +1,6 @@
 class ApiConstants {
   // Base URL for the API endpoints
-  static const String BASE_URL =
-      "https://abs.basitd.net/api-absensi-mobile-v2/public/api";
+  static const String BASE_URL = "https://abs.basitd.net/api-absensi-mobile-v2/public/api";
 
   // Auth endpoints
   static const String LOGIN = '$BASE_URL/login';

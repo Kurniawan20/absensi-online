@@ -62,7 +62,6 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
         ),
       ),
       bottomNavigationBar: Container(
-        height: 65, // Total height including shadow
         decoration: BoxDecoration(
           color: Colors.white,
           boxShadow: [
@@ -74,65 +73,62 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
           ],
         ),
         child: SafeArea(
-          child: SizedBox(
-            height: 70, // Navigation bar content height
-            child: BottomNavigationBar(
-              currentIndex: _selectedIndex,
-              onTap: _onItemTapped,
-              backgroundColor: Colors.white, // Changed to white background
-              elevation: 0,
-              type: BottomNavigationBarType.fixed,
-              selectedItemColor: const Color.fromRGBO(
-                  1, 101, 65, 1), // Primary green for selected items
-              unselectedItemColor:
-                  const Color(0xFF9E9E9E), // Grey for unselected
-              selectedFontSize: 12,
-              unselectedFontSize: 12,
-              selectedLabelStyle: const TextStyle(
-                fontWeight: FontWeight.w500,
-              ),
-              unselectedLabelStyle: const TextStyle(
-                fontWeight: FontWeight.w500,
-              ),
-              items: [
-                BottomNavigationBarItem(
-                  icon: Padding(
-                    padding: const EdgeInsets.only(bottom: 4, top: 8),
-                    child: Icon(
-                      _selectedIndex == 0
-                          ? FluentIcons.home_24_filled
-                          : FluentIcons.home_24_regular,
-                      size: 24,
-                    ),
-                  ),
-                  label: 'Home',
-                ),
-                BottomNavigationBarItem(
-                  icon: Padding(
-                    padding: const EdgeInsets.only(bottom: 4, top: 8),
-                    child: Icon(
-                      _selectedIndex == 1
-                          ? FluentIcons.presence_available_10_filled
-                          : FluentIcons.presence_available_10_regular,
-                      size: 24,
-                    ),
-                  ),
-                  label: 'Kehadiran',
-                ),
-                BottomNavigationBarItem(
-                  icon: Padding(
-                    padding: const EdgeInsets.only(bottom: 4, top: 8),
-                    child: Icon(
-                      _selectedIndex == 2
-                          ? FluentIcons.person_24_filled
-                          : FluentIcons.person_24_regular,
-                      size: 24,
-                    ),
-                  ),
-                  label: 'Profile',
-                ),
-              ],
+          child: BottomNavigationBar(
+            currentIndex: _selectedIndex,
+            onTap: _onItemTapped,
+            backgroundColor: Colors.white,
+            elevation: 0,
+            type: BottomNavigationBarType.fixed,
+            selectedItemColor: const Color.fromRGBO(
+                1, 101, 65, 1), // Primary green for selected items
+            unselectedItemColor:
+                const Color(0xFF9E9E9E), // Grey for unselected
+            selectedFontSize: 11,
+            unselectedFontSize: 11,
+            selectedLabelStyle: const TextStyle(
+              fontWeight: FontWeight.w500,
             ),
+            unselectedLabelStyle: const TextStyle(
+              fontWeight: FontWeight.w500,
+            ),
+            items: [
+              BottomNavigationBarItem(
+                icon: Padding(
+                  padding: const EdgeInsets.only(bottom: 2, top: 4),
+                  child: Icon(
+                    _selectedIndex == 0
+                        ? FluentIcons.home_24_filled
+                        : FluentIcons.home_24_regular,
+                    size: 22,
+                  ),
+                ),
+                label: 'Home',
+              ),
+              BottomNavigationBarItem(
+                icon: Padding(
+                  padding: const EdgeInsets.only(bottom: 2, top: 4),
+                  child: Icon(
+                    _selectedIndex == 1
+                        ? FluentIcons.presence_available_10_filled
+                        : FluentIcons.presence_available_10_regular,
+                    size: 22,
+                  ),
+                ),
+                label: 'Kehadiran',
+              ),
+              BottomNavigationBarItem(
+                icon: Padding(
+                  padding: const EdgeInsets.only(bottom: 2, top: 4),
+                  child: Icon(
+                    _selectedIndex == 2
+                        ? FluentIcons.person_24_filled
+                        : FluentIcons.person_24_regular,
+                    size: 22,
+                  ),
+                ),
+                label: 'Profile',
+              ),
+            ],
           ),
         ),
       ),

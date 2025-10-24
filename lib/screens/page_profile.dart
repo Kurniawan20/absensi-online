@@ -269,12 +269,12 @@ class _ProfileState extends State<Profile> {
                   const Divider(height: 1),
                   ListTile(
                     leading: const Icon(
-                      FluentIcons.calendar_24_regular,
+                      FluentIcons.building_24_regular,
                       color: Colors.grey,
                       size: 24,
                     ),
                     title: const Text(
-                      'Tanggal Lahir',
+                      'Kode Kantor',
                       style: TextStyle(
                         color: Colors.black87,
                         fontSize: 14,
@@ -283,7 +283,7 @@ class _ProfileState extends State<Profile> {
                       ),
                     ),
                     subtitle: Text(
-                      '23 October 2000',
+                      officeCode ?? '-',
                       style: TextStyle(
                         color: Colors.grey,
                         fontSize: 16,
@@ -294,12 +294,12 @@ class _ProfileState extends State<Profile> {
                   const Divider(height: 1),
                   ListTile(
                     leading: const Icon(
-                      FluentIcons.location_24_regular,
+                      FluentIcons.building_bank_24_regular,
                       color: Colors.grey,
                       size: 24,
                     ),
                     title: const Text(
-                      'Alamat',
+                      'Nama Kantor',
                       style: TextStyle(
                         color: Colors.black87,
                         fontSize: 14,
@@ -308,7 +308,7 @@ class _ProfileState extends State<Profile> {
                       ),
                     ),
                     subtitle: Text(
-                      'Jl. Raya Bogor KM.23 No.99',
+                      officeName ?? '-',
                       style: TextStyle(
                         color: Colors.grey,
                         fontSize: 16,

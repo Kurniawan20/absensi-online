@@ -29,12 +29,13 @@ class BiometricService {
       final availableBiometrics = await _localAuth.getAvailableBiometrics();
       print('Available biometrics: $availableBiometrics');
       
-      // Check specifically for fingerprint support
-      final hasFingerprint = availableBiometrics.contains(BiometricType.fingerprint) ||
-                           availableBiometrics.contains(BiometricType.strong);
-      print('Has fingerprint capability: $hasFingerprint');
+      // Check for any biometric support (fingerprint, face, or strong)
+      final hasBiometric = availableBiometrics.contains(BiometricType.fingerprint) ||
+                           availableBiometrics.contains(BiometricType.strong) ||
+                           availableBiometrics.contains(BiometricType.face);
+      print('Has biometric capability: $hasBiometric');
       
-      return hasFingerprint;
+      return hasBiometric;
     } on PlatformException catch (e) {
       print('Error checking biometric availability: $e');
       return false;
@@ -73,9 +74,10 @@ class BiometricService {
       final availableBiometrics = await _localAuth.getAvailableBiometrics();
       print('Available biometrics: $availableBiometrics');
       
-      // Check for fingerprint or strong biometric
+      // Check for any biometric (fingerprint, face, or strong)
       final hasBiometric = availableBiometrics.contains(BiometricType.fingerprint) ||
-                          availableBiometrics.contains(BiometricType.strong);
+                          availableBiometrics.contains(BiometricType.strong) ||
+                          availableBiometrics.contains(BiometricType.face);
       print('Has biometric capability: $hasBiometric');
       
       if (!hasBiometric) {
@@ -84,7 +86,7 @@ class BiometricService {
       }
 
       final authenticated = await _localAuth.authenticate(
-        localizedReason: 'Silakan gunakan sidik jari untuk login',
+        localizedReason: 'Silakan gunakan biometrik untuk login',
         options: const AuthenticationOptions(
           stickyAuth: false,
           biometricOnly: true,

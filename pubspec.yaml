@@ -98,7 +98,9 @@ dev_dependencies:
 flutter_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/icons/ic_launcher/res/mipmap-xxxhdpi/ic_launcher_round.png"
+  image_path: "assets/icons/ic_launcher/res/mipmap-xxxhdpi/ic_launcher.png"
+  remove_alpha_ios: true  # Remove alpha channel for iOS
+  background_color: "#FFFFFF"  # Add white background if needed
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

@@ -70,7 +70,7 @@ dependencies:
   cool_alert: ^2.0.1
   flutter_jailbreak_detection:
     git:
-      url: https://github.com/pdurasie-ecovery/flutter_jailbreak_detection.git
+      url: https://github.com/pdurasie-ecovery/flutter_jailbreak_detection. 
       ref: add-namespace
   flutter_launcher_icons: ^0.14.1
   dio: ^5.7.0

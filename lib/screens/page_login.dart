@@ -16,6 +16,7 @@ import './main_layout.dart';
 import '../services/biometric_service.dart';
 import '../services/secure_storage_service.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../utils/storage_config.dart';
 
 class Login extends StatefulWidget {
   const Login({Key? key}) : super(key: key);
@@ -303,7 +304,7 @@ class _LoginState extends State<Login> {
     await prefs.setString('password', password);
 
     // Verify token is stored
-    final storage = const FlutterSecureStorage();
+    final storage = StorageConfig.secureStorage;
     final token = await storage.read(key: 'auth_token');
     print('\n=== Token Check After Login ===');
     print('Token present: ${token != null}');
@@ -496,7 +497,7 @@ class _LoginState extends State<Login> {
                           TextSpan(text: '👋'),
                           TextSpan(text: '\ndi '),
                           TextSpan(
-                            text: 'Hadir Bank Aceh',
+                            text: 'HABA',
                             style: TextStyle(
                               color: Color.fromRGBO(1, 101, 65, 1),
                               fontFamily: 'Poppins',
@@ -534,7 +535,7 @@ class _LoginState extends State<Login> {
                           color: Colors.black87,
                         ),
                         decoration: InputDecoration(
-                          hintText: 'NPP',
+                          hintText: 'NRK',
                           hintStyle: TextStyle(
                             color: Colors.grey[600],
                             fontSize: 16,

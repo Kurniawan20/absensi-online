@@ -28,6 +28,8 @@ import '../widgets/custom_alert.dart';
 import '../widgets/security_alert.dart';
 import '../services/attendance_service.dart';
 import '../services/security_service.dart';
+import '../services/attendance_reminder_service.dart';
+import '../utils/storage_config.dart';
 
 void main() => runApp(const Presence());
 
@@ -75,6 +77,7 @@ class _PresenceState extends State<Presence> {
 
   final _attendanceService = AttendanceService();
   final _securityService = SecurityService();
+  final _reminderService = AttendanceReminderService();
 
   void initState() {
     super.initState();
@@ -85,6 +88,9 @@ class _PresenceState extends State<Presence> {
       if (!mounted) return;
       setState(() {});
     });
+    
+    // Initialize reminder service
+    _reminderService.initialize();
 
     getUserCurrentLocation().then((currLocation) {
       if (!mounted) return;
@@ -323,7 +329,7 @@ class _PresenceState extends State<Presence> {
     print('Device ID: $_deviceId');
 
     try {
-      final storage = const FlutterSecureStorage();
+      final storage = StorageConfig.secureStorage;
       var token = await storage.read(key: 'auth_token');
 
       print('\n=== Token Check ===');
@@ -441,6 +447,20 @@ class _PresenceState extends State<Presence> {
                   _jamPulang = currentTime;
                 }
               });
+
+              // Handle reminder notifications
+              if (absenType == 'absenmasuk') {
+                // Schedule check-out reminder after successful check-in
+                await _reminderService.scheduleCheckOutReminder(
+                  checkInTime: now,
+                  workHours: 8, // 8 jam kerja
+                );
+                print('✅ Check-out reminder scheduled');
+              } else if (absenType == 'absenpulang') {
+                // Cancel reminders after successful check-out
+                await _reminderService.cancelCheckOutReminders();
+                print('✅ Check-out reminders cancelled');
+              }
 
               // Close loading modal first
               Navigator.of(context, rootNavigator: true).pop(context);

@@ -6,11 +6,13 @@ import 'package:http/io_client.dart' show IOClient;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:jwt_decode/jwt_decode.dart';
+import 'package:flutter/foundation.dart';
 import '../constants/api_constants.dart';
 import '../services/secure_storage_service.dart';
+import '../utils/storage_config.dart';
 
 class LoginRepository {
-  final storage = const FlutterSecureStorage();
+  final storage = StorageConfig.secureStorage;
   late final IOClient _client;
   final _secureStorage = SecureStorageService();
 
@@ -31,11 +33,15 @@ class LoginRepository {
       // Clean and format the input data
       final cleanNpp = email.trim();
       final cleanDeviceId = deviceId.trim();
+      
+      // Detect platform correctly
+      final platformName = Platform.isIOS ? 'ios' : 'android';
 
       // Log the request details
       print('Attempting login with:');
       print('NPP: $cleanNpp');
       print('Device ID: $cleanDeviceId');
+      print('Platform: $platformName');
 
       final loginResponse = await _client
           .post(
@@ -43,14 +49,14 @@ class LoginRepository {
             headers: {
               'Content-Type': 'application/json; charset=UTF-8',
               'Accept': 'application/json',
-              'User-Agent': 'Mobile-Presence-App',
+              'User-Agent': 'Mobile-Presence-App/$platformName',
             },
             body: jsonEncode({
               'npp': cleanNpp,
               'password': password,
               'device_id': cleanDeviceId,
               'app_version': '1.0.0',
-              'platform': 'android',
+              'platform': platformName,
             }),
           )
           .timeout(const Duration(seconds: 10));
@@ -66,7 +72,7 @@ class LoginRepository {
         'password': '[REDACTED]',
         'device_id': cleanDeviceId,
         'app_version': '1.0.0',
-        'platform': 'android',
+        'platform': platformName,
       })}');
       print('Login response status code: ${loginResponse.statusCode}');
       print('Login response headers: ${loginResponse.headers}');

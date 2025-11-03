@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/api_constants.dart';
 import '../bloc/presence/presence_state.dart';
+import '../utils/storage_config.dart';
 
 class PresenceRepository {
   Future<Map<String, dynamic>> checkIn({
@@ -15,7 +16,7 @@ class PresenceRepository {
     String? imageBase64,
   }) async {
     try {
-      final storage = const FlutterSecureStorage();
+      final storage = StorageConfig.secureStorage;
       final token = await storage.read(key: 'auth_token');
       
       print('\n=== Making attendance request (check-in) ===');
@@ -81,7 +82,7 @@ class PresenceRepository {
     String? imageBase64,
   }) async {
     try {
-      final storage = const FlutterSecureStorage();
+      final storage = StorageConfig.secureStorage;
       final token = await storage.read(key: 'auth_token');
       
       print('\n=== Making attendance request (checkout) ===');

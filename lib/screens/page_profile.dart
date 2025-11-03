@@ -7,6 +7,7 @@ import './page_presence.dart';
 import './page_login.dart';
 import './settings_page.dart';
 import 'dart:math' as math;
+import '../utils/storage_config.dart';
 
 class CirclePatternPainter extends CustomPainter {
   @override
@@ -110,7 +111,7 @@ class _ProfileState extends State<Profile> {
 
   Future<void> signOut() async {
     print('Starting sign out process');
-    final storage = const FlutterSecureStorage();
+    final storage = StorageConfig.secureStorage;
 
     // Save biometric state before clearing
     final isBiometricEnabled = await storage.read(key: 'biometric_enabled');

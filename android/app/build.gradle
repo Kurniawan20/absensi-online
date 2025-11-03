@@ -53,7 +53,7 @@ android {
 
     defaultConfig {
         applicationId "com.example.monitoring_project"
-        minSdk 21
+        minSdk 29  // Android 10+ for optimal security (was 23)
         targetSdk flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName

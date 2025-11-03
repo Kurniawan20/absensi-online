@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../utils/storage_config.dart';
 
 class SecureStorageService {
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  // Use centralized storage configuration
+  final FlutterSecureStorage _storage = StorageConfig.secureStorage;
   static const String _credentialsKey = 'saved_credentials';
   static const String _biometricEnabledKey = 'biometric_enabled';
   static const String _lastUserKey = 'last_user_email';

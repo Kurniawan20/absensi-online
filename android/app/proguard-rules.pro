@@ -41,3 +41,23 @@
 -keep class * implements android.os.Parcelable {
     public static final android.os.Parcelable$Creator *;
 }
+
+# Flutter Secure Storage - Keep encryption classes
+-keep class com.it_nomads.fluttersecurestorage.** { *; }
+-dontwarn com.it_nomads.fluttersecurestorage.**
+
+# Android Security & Crypto
+-keep class javax.crypto.** { *; }
+-keep class javax.crypto.spec.** { *; }
+-dontwarn javax.crypto.**
+-keep class java.security.** { *; }
+-dontwarn java.security.**
+
+# AndroidX Security Crypto (for EncryptedSharedPreferences)
+-keep class androidx.security.crypto.** { *; }
+-dontwarn androidx.security.crypto.**
+
+# Prevent stripping of security-related classes
+-keepclassmembers class * {
+    @androidx.security.crypto.* <methods>;
+}

@@ -9,11 +9,12 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
 import '../screens/Apis.dart';
+import '../utils/storage_config.dart';
 
 class HomeController {
   SharedPreferences? preferences;
   late SharedPreferences _sharedPreferences;
-  final storage = const FlutterSecureStorage();
+  final storage = StorageConfig.secureStorage;
 
   Future<void> initializePreference() async {
     this.preferences = await SharedPreferences.getInstance();

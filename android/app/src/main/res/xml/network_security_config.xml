@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+    <!-- Disable cleartext traffic for all domains -->
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
-            <certificates src="user" />
         </trust-anchors>
     </base-config>
+    
+    <!-- Only allow HTTPS connections -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">abs.basitd.net</domain>
+        <domain includeSubdomains="true">promo.bankaceh.co.id</domain>
+        <domain includeSubdomains="true">googleapis.com</domain>
+        <domain includeSubdomains="true">google.com</domain>
+    </domain-config>
 </network-security-config>

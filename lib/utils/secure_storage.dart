@@ -1,11 +1,12 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'storage_config.dart';
 
 class SecureStorage {
   final FlutterSecureStorage _storage;
   static const String _tokenKey = 'auth_token';
 
   SecureStorage({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+      : _storage = storage ?? StorageConfig.secureStorage;
 
   Future<String?> getToken() async {
     try {

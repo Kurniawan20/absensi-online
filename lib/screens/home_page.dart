@@ -17,6 +17,7 @@ import 'package:intl/intl.dart';
 import 'dart:math' as math;
 import './attendance_recap_screen.dart';
 import '../services/attendance_service.dart';
+import '../utils/storage_config.dart';
 
 extension StringCasingExtension on String {
   String toTitleCase() => this
@@ -78,7 +79,7 @@ class _HomeScreenState extends State<HomePage>
   final AttendanceRecapRepository _attendanceRepository =
       AttendanceRecapRepository();
   final _attendanceService = AttendanceService();
-  final storage = const FlutterSecureStorage();
+  final storage = StorageConfig.secureStorage;
 
   String _getGreeting() {
     var hour = DateTime.now().hour;

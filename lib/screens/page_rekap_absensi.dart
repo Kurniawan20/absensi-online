@@ -10,6 +10,7 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'Apis.dart';
 import 'home_page.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
+import '../utils/storage_config.dart';
 
 class MonthYearPickerWidget extends StatefulWidget {
   final int initialYear;
@@ -170,7 +171,7 @@ class Data {
 }
 
 class _RekapAbsensiState extends State<RekapAbsensi> {
-  final storage = const FlutterSecureStorage();
+  final storage = StorageConfig.secureStorage;
   List<Data> data = [];
   List<Data> _paginatedData = [];
   bool _isLoadingOverlay = false;

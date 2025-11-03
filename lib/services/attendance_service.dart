@@ -4,13 +4,14 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../constants/api_constants.dart';
 import 'package:flutter/foundation.dart';
+import '../utils/storage_config.dart';
 
 class AttendanceService {
   static final AttendanceService _instance = AttendanceService._internal();
   factory AttendanceService() => _instance;
   AttendanceService._internal();
 
-  final _storage = const FlutterSecureStorage();
+  final _storage = StorageConfig.secureStorage;
 
   // List to store listeners
   final List<VoidCallback> _listeners = [];

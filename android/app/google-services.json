@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "398639345647",
-    "project_id": "absensi-mobile-bc8bc",
-    "storage_bucket": "absensi-mobile-bc8bc.appspot.com"
+    "project_number": "646216071747",
+    "project_id": "haba-1f47f",
+    "storage_bucket": "haba-1f47f.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:398639345647:android:0abbd68a3fc7c65f39d01a",
+        "mobilesdk_app_id": "1:646216071747:android:aa05d24a2225a5ec2ab2f6",
         "android_client_info": {
-          "package_name": "com.bas.haba"
+          "package_name": "id.basitd.absensi.mobile"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCe-q5qOKxClES17dx74cuNPj6L4-KuAfE"
+          "current_key": "AIzaSyD5YxmtrDrjZDGNZjWa-J7Qm91cVwfT1OE"
         }
       ],
       "services": {

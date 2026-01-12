@@ -5,11 +5,13 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
 class AttendanceReminderService {
-  static final AttendanceReminderService _instance = AttendanceReminderService._internal();
+  static final AttendanceReminderService _instance =
+      AttendanceReminderService._internal();
   factory AttendanceReminderService() => _instance;
   AttendanceReminderService._internal();
 
-  final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _notifications =
+      FlutterLocalNotificationsPlugin();
   bool _isInitialized = false;
 
   // Notification IDs
@@ -21,16 +23,18 @@ class AttendanceReminderService {
 
     // Initialize timezone
     tz.initializeTimeZones();
-    
+
     // Set local timezone
     final String timeZoneName = await _getTimeZoneName();
     tz.setLocalLocation(tz.getLocation(timeZoneName));
 
     // Android initialization
-    const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/launcher_icon');
+    const AndroidInitializationSettings androidSettings =
+        AndroidInitializationSettings('@mipmap/launcher_icon');
 
     // iOS initialization
-    const DarwinInitializationSettings iosSettings = DarwinInitializationSettings(
+    const DarwinInitializationSettings iosSettings =
+        DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
@@ -80,27 +84,41 @@ class AttendanceReminderService {
     // Cancel any existing reminders
     await cancelCheckOutReminders();
 
+    // ⚠️ TESTING MODE: Quick reminders for testing
+    // TODO: Revert to production timing before release
+    // Production: 30 minutes before check-out (8 hours after check-in)
+    // Testing: 2 minutes after check-in
+
     // Calculate check-out time (8 hours after check-in)
     final checkOutTime = checkInTime.add(Duration(hours: workHours));
-    
-    // Schedule reminder 30 minutes before check-out time
-    final reminderTime = checkOutTime.subtract(const Duration(minutes: 30));
-    
+
+    // TESTING: Schedule reminder 2 minutes after check-in (instead of 30 min before checkout)
+    final reminderTime = checkInTime.add(const Duration(minutes: 2));
+
+    // Production version (commented out for testing):
+    // final reminderTime = checkOutTime.subtract(const Duration(minutes: 30));
+
     // Only schedule if reminder time is in the future
     if (reminderTime.isAfter(DateTime.now())) {
       await _scheduleNotification(
         id: checkOutReminderId,
         title: '⏰ Pengingat Absen Pulang',
-        body: 'Jangan lupa absen pulang! Waktu pulang Anda sekitar ${_formatTime(checkOutTime)}',
+        body:
+            'Jangan lupa absen pulang! Waktu pulang Anda sekitar ${_formatTime(checkOutTime)}',
         scheduledTime: reminderTime,
         payload: 'checkout_reminder',
       );
-      
-      print('Check-out reminder scheduled for: ${_formatTime(reminderTime)}');
+
+      print(
+          '✅ [TESTING] Check-out reminder scheduled for: ${_formatTime(reminderTime)} (2 min from now)');
     }
 
-    // Schedule late reminder (1 hour after expected check-out)
-    final lateReminderTime = checkOutTime.add(const Duration(hours: 1));
+    // TESTING: Schedule late reminder 4 minutes after check-in (instead of 1 hour after checkout)
+    final lateReminderTime = checkInTime.add(const Duration(minutes: 4));
+
+    // Production version (commented out for testing):
+    // final lateReminderTime = checkOutTime.add(const Duration(hours: 1));
+
     if (lateReminderTime.isAfter(DateTime.now())) {
       await _scheduleNotification(
         id: lateCheckOutReminderId,
@@ -109,14 +127,16 @@ class AttendanceReminderService {
         scheduledTime: lateReminderTime,
         payload: 'late_checkout_reminder',
       );
-      
-      print('Late check-out reminder scheduled for: ${_formatTime(lateReminderTime)}');
+
+      print(
+          '✅ [TESTING] Late check-out reminder scheduled for: ${_formatTime(lateReminderTime)} (4 min from now)');
     }
 
     // Save reminder status
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('has_checkout_reminder', true);
-    await prefs.setString('reminder_check_in_time', checkInTime.toIso8601String());
+    await prefs.setString(
+        'reminder_check_in_time', checkInTime.toIso8601String());
   }
 
   Future<void> _scheduleNotification({
@@ -126,9 +146,11 @@ class AttendanceReminderService {
     required DateTime scheduledTime,
     required String payload,
   }) async {
-    final tz.TZDateTime scheduledDate = tz.TZDateTime.from(scheduledTime, tz.local);
+    final tz.TZDateTime scheduledDate =
+        tz.TZDateTime.from(scheduledTime, tz.local);
 
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
       'attendance_reminder_channel',
       'Pengingat Absensi',
       channelDescription: 'Notifikasi pengingat untuk absen pulang',
@@ -159,7 +181,8 @@ class AttendanceReminderService {
       scheduledDate,
       details,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
       payload: payload,
     );
   }
@@ -169,12 +192,115 @@ class AttendanceReminderService {
   Future<void> cancelCheckOutReminders() async {
     await _notifications.cancel(checkOutReminderId);
     await _notifications.cancel(lateCheckOutReminderId);
-    
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('has_checkout_reminder');
     await prefs.remove('reminder_check_in_time');
-    
+
     print('Check-out reminders cancelled');
+  }
+
+  // Notification ID for daily reminder
+  static const int dailyCheckOutReminderId = 1003;
+
+  /// Schedule daily reminder at 17:00 (5 PM) for check-out
+  /// Call this once when the user logs in or app starts
+  Future<void> scheduleDailyCheckOutReminder({
+    int hour = 17,
+    int minute = 0,
+  }) async {
+    if (!_isInitialized) await initialize();
+
+    // Cancel any existing daily reminder first
+    await cancelDailyCheckOutReminder();
+
+    // Create scheduled time for today at specified hour:minute
+    final now = DateTime.now();
+    var scheduledDate = DateTime(now.year, now.month, now.day, hour, minute);
+
+    // If the time has already passed today, schedule for tomorrow
+    if (scheduledDate.isBefore(now)) {
+      scheduledDate = scheduledDate.add(const Duration(days: 1));
+    }
+
+    final tz.TZDateTime scheduledTZDate =
+        tz.TZDateTime.from(scheduledDate, tz.local);
+
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+      'daily_checkout_reminder_channel',
+      'Pengingat Harian Absen Pulang',
+      channelDescription:
+          'Notifikasi pengingat harian untuk absen pulang jam 17:00',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/launcher_icon',
+      enableVibration: true,
+      playSound: true,
+    );
+
+    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+      sound: 'default',
+    );
+
+    const NotificationDetails details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    // Schedule daily repeating notification
+    await _notifications.zonedSchedule(
+      dailyCheckOutReminderId,
+      '🏠 Waktunya Pulang!',
+      'Jangan lupa absen pulang sebelum meninggalkan kantor.',
+      scheduledTZDate,
+      details,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents:
+          DateTimeComponents.time, // Repeat daily at this time
+      payload: 'daily_checkout_reminder',
+    );
+
+    // Save preference
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('daily_checkout_reminder_enabled', true);
+    await prefs.setInt('daily_checkout_reminder_hour', hour);
+    await prefs.setInt('daily_checkout_reminder_minute', minute);
+
+    print(
+        '✅ Daily check-out reminder scheduled for ${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} every day');
+  }
+
+  /// Cancel daily check-out reminder
+  Future<void> cancelDailyCheckOutReminder() async {
+    await _notifications.cancel(dailyCheckOutReminderId);
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('daily_checkout_reminder_enabled');
+
+    print('Daily check-out reminder cancelled');
+  }
+
+  /// Check if daily reminder is enabled
+  Future<bool> isDailyReminderEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('daily_checkout_reminder_enabled') ?? false;
+  }
+
+  /// Get the scheduled time for daily reminder
+  Future<String?> getDailyReminderTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hour = prefs.getInt('daily_checkout_reminder_hour');
+    final minute = prefs.getInt('daily_checkout_reminder_minute');
+    if (hour != null && minute != null) {
+      return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+    }
+    return null;
   }
 
   /// Schedule test reminder (for quick testing - 2 minutes from now)
@@ -182,7 +308,7 @@ class AttendanceReminderService {
     if (!_isInitialized) await initialize();
 
     final testTime = DateTime.now().add(const Duration(minutes: 2));
-    
+
     await _scheduleNotification(
       id: 9999,
       title: '🧪 Test Reminder (2 min)',
@@ -190,7 +316,7 @@ class AttendanceReminderService {
       scheduledTime: testTime,
       payload: 'test_reminder',
     );
-    
+
     print('✅ Test reminder scheduled for: ${_formatTime(testTime)}');
   }
 
@@ -201,7 +327,8 @@ class AttendanceReminderService {
   }) async {
     if (!_isInitialized) await initialize();
 
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
       'attendance_reminder_channel',
       'Pengingat Absensi',
       channelDescription: 'Notifikasi pengingat untuk absen pulang',
@@ -264,7 +391,8 @@ class AttendanceReminderService {
   Future<bool> requestPermissions() async {
     if (Platform.isIOS) {
       final result = await _notifications
-          .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+          .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin>()
           ?.requestPermissions(
             alert: true,
             badge: true,
@@ -272,9 +400,11 @@ class AttendanceReminderService {
           );
       return result ?? false;
     } else if (Platform.isAndroid) {
-      final androidImplementation = _notifications.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
-      final granted = await androidImplementation?.requestNotificationsPermission();
+      final androidImplementation =
+          _notifications.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+      final granted =
+          await androidImplementation?.requestNotificationsPermission();
       return granted ?? false;
     }
     return true;

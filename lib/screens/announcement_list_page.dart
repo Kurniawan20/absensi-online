@@ -18,15 +18,16 @@ class _AnnouncementListPageState extends State<AnnouncementListPage> {
       'sender': 'Kimberly Violon',
       'role': 'Head of HR',
       'attachment': 'Promotion Letter Sr. UI/UX Designer.pdf',
-      'avatar': 'assets/images/avatar_3d.jpg',
+      'avatar': 'assets/images/avatar_male.png',
     },
     {
       'title': 'Important: System Maintenance Notice',
-      'subtitle': 'Scheduled maintenance on January 15, 2025, from 22:00 - 24:00',
+      'subtitle':
+          'Scheduled maintenance on January 15, 2025, from 22:00 - 24:00',
       'sender': 'John Smith',
       'role': 'IT Manager',
       'attachment': 'Maintenance Schedule Details.pdf',
-      'avatar': 'assets/images/avatar_3d.jpg',
+      'avatar': 'assets/images/avatar_male.png',
     },
     {
       'title': 'Annual Company Meeting 2025',
@@ -34,7 +35,7 @@ class _AnnouncementListPageState extends State<AnnouncementListPage> {
       'sender': 'Sarah Johnson',
       'role': 'Executive Assistant',
       'attachment': 'Annual Meeting Agenda 2025.pdf',
-      'avatar': 'assets/images/avatar_3d.jpg',
+      'avatar': 'assets/images/avatar_male.png',
     },
   ];
 
@@ -56,7 +57,8 @@ class _AnnouncementListPageState extends State<AnnouncementListPage> {
         backgroundColor: const Color.fromRGBO(1, 101, 65, 1),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(FluentIcons.arrow_left_24_regular, color: Colors.white),
+          icon: const Icon(FluentIcons.arrow_left_24_regular,
+              color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -99,7 +101,8 @@ class _AnnouncementListPageState extends State<AnnouncementListPage> {
                         CircleAvatar(
                           radius: 20,
                           backgroundImage: AssetImage(
-                            announcement['avatar'] ?? 'assets/images/avatar_3d.jpg',
+                            announcement['avatar'] ??
+                                'assets/images/avatar_male.png',
                           ),
                         ),
                         const SizedBox(width: 12),

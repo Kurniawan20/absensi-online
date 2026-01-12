@@ -8,6 +8,7 @@ import './page_login.dart';
 import './settings_page.dart';
 import 'dart:math' as math;
 import '../utils/storage_config.dart';
+import '../services/avatar_service.dart';
 
 class CirclePatternPainter extends CustomPainter {
   @override
@@ -90,6 +91,7 @@ class _ProfileState extends State<Profile> {
   String? officeName;
   String? department;
   String? imageUrl;
+  String _selectedAvatar = AvatarService.defaultAvatar;
 
   @override
   void initState() {
@@ -99,6 +101,7 @@ class _ProfileState extends State<Profile> {
 
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
+    final avatar = await AvatarService.getSelectedAvatar();
     setState(() {
       npp = prefs.getString('npp');
       name = prefs.getString('nama');
@@ -106,7 +109,133 @@ class _ProfileState extends State<Profile> {
       officeName = prefs.getString('nama_kantor');
       department = prefs.getString('ket_bidang');
       imageUrl = prefs.getString('image_url');
+      _selectedAvatar = avatar;
     });
+  }
+
+  void _showAvatarSelector() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Pilih Avatar',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Poppins',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Pilih avatar yang sesuai dengan Anda',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+                fontFamily: 'Poppins',
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: AvatarService.availableAvatars.map((avatar) {
+                final isSelected = avatar['path'] == _selectedAvatar;
+                return GestureDetector(
+                  onTap: () async {
+                    final avatarService = AvatarService();
+                    await avatarService.setSelectedAvatar(avatar['path']!);
+                    setState(() {
+                      _selectedAvatar = avatar['path']!;
+                    });
+                    Navigator.pop(context);
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isSelected
+                                  ? const Color.fromRGBO(1, 101, 65, 1)
+                                  : Colors.transparent,
+                              width: 3,
+                            ),
+                          ),
+                          child: ClipOval(
+                            child: Image.asset(
+                              avatar['path']!,
+                              width: 80,
+                              height: 80,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          avatar['label']!,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                            color: isSelected
+                                ? const Color.fromRGBO(1, 101, 65, 1)
+                                : Colors.grey[700],
+                            fontFamily: 'Poppins',
+                          ),
+                        ),
+                        if (isSelected)
+                          Container(
+                            margin: const EdgeInsets.only(top: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color.fromRGBO(1, 101, 65, 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Text(
+                              'Terpilih',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Color.fromRGBO(1, 101, 65, 1),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> signOut() async {
@@ -154,15 +283,6 @@ class _ProfileState extends State<Profile> {
             color: Colors.white,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(FluentIcons.settings_24_regular),
-            color: Colors.white,
-            onPressed: () {
-              // Add settings functionality here
-            },
-          ),
-        ],
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -179,61 +299,83 @@ class _ProfileState extends State<Profile> {
                     size: Size(
                         double.infinity, 300), // Match the container height
                   ),
-                  Positioned(
-                    top: MediaQuery.of(context).padding.top +
-                        kToolbarHeight +
-                        20,
-                    left: 0,
-                    right: 0,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Profile Image Section
-                        Center(
-                          child: Column(
-                            children: [
-                              Container(
-                                margin: const EdgeInsets.only(top: 16),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: const Color.fromARGB(255, 212, 212, 212),
-                                    width: 3,
-                                  ),
-                                ),
-                                child: ClipOval(
-                                  child: Image.asset(
-                                    'assets/images/avatar_3d.jpg',
-                                    fit: BoxFit.cover,
-                                    width: 100,
-                                    height: 100,
-                                  ),
+                  Positioned.fill(
+                    child: Align(
+                      alignment: Alignment.center,
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                            top: MediaQuery.of(context).padding.top +
+                                kToolbarHeight), // Offset for AppBar
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color:
+                                      const Color.fromARGB(255, 212, 212, 212),
+                                  width: 3,
                                 ),
                               ),
-                              const SizedBox(height: 12),
-                              Text(
-                                name ?? 'Loading...',
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  fontFamily: 'Poppins',
+                              child: GestureDetector(
+                                onTap: _showAvatarSelector,
+                                child: Stack(
+                                  children: [
+                                    ClipOval(
+                                      child: Image.asset(
+                                        _selectedAvatar,
+                                        fit: BoxFit.cover,
+                                        width: 100,
+                                        height: 100,
+                                      ),
+                                    ),
+                                    Positioned(
+                                      bottom: 0,
+                                      right: 0,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: const BoxDecoration(
+                                          color: Color.fromRGBO(1, 101, 65, 1),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.edit,
+                                          color: Colors.white,
+                                          size: 16,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 6),
-                              Text(
-                                npp ?? '',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.white.withOpacity(0.8),
-                                  fontFamily: 'Poppins',
-                                ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              name ?? 'Loading...',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                fontFamily: 'Poppins',
                               ),
-                              const SizedBox(height: 20),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              npp ?? '',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.white.withOpacity(0.8),
+                                fontFamily: 'Poppins',
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ],

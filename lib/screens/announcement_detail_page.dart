@@ -28,7 +28,8 @@ class AnnouncementDetailPage extends StatelessWidget {
         backgroundColor: const Color.fromRGBO(1, 101, 65, 1),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(FluentIcons.arrow_left_24_regular, color: Colors.white),
+          icon: const Icon(FluentIcons.arrow_left_24_regular,
+              color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -45,7 +46,7 @@ class AnnouncementDetailPage extends StatelessWidget {
                   CircleAvatar(
                     radius: 24,
                     backgroundImage: AssetImage(
-                      announcement['avatar'] ?? 'assets/images/avatar_3d.jpg',
+                      announcement['avatar'] ?? 'assets/images/avatar_male.png',
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -161,7 +162,8 @@ class AnnouncementDetailPage extends StatelessWidget {
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         announcement['attachment'] ?? '',

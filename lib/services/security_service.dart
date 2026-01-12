@@ -7,10 +7,22 @@ class SecurityService {
   static const SecurityService _instance = SecurityService._internal();
   factory SecurityService() => _instance;
   const SecurityService._internal();
+  
+  // Testing mode flag - set to true to bypass security checks even in release builds
+  static const bool _isTestingMode = false;
 
   /// Check if the device is in a secure state for attendance
   Future<SecurityCheckResult> performSecurityCheck({bool forceCheck = false}) async {
     try {
+      // Skip security checks in testing mode
+      if (_isTestingMode && !forceCheck) {
+        return SecurityCheckResult(
+          isSecure: true,
+          violations: [],
+          message: 'Testing mode - security checks bypassed',
+        );
+      }
+      
       // Skip security checks in debug mode for development (unless forced)
       if (kDebugMode && !forceCheck) {
         return SecurityCheckResult(

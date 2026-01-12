@@ -1,15 +1,11 @@
-import 'dart:math' show Random;
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'Apis.dart';
 import 'home_page.dart';
-import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 import '../utils/storage_config.dart';
 
 class MonthYearPickerWidget extends StatefulWidget {
@@ -33,10 +29,20 @@ class MonthYearPickerWidget extends StatefulWidget {
 class _MonthYearPickerWidgetState extends State<MonthYearPickerWidget> {
   late int selectedYear;
   late int selectedMonth;
-  
+
   final List<String> months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'Mei',
+    'Jun',
+    'Jul',
+    'Agu',
+    'Sep',
+    'Okt',
+    'Nov',
+    'Des',
   ];
 
   @override
@@ -57,12 +63,14 @@ class _MonthYearPickerWidgetState extends State<MonthYearPickerWidget> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconButton(
-                onPressed: selectedYear > 2020 ? () {
-                  setState(() {
-                    selectedYear--;
-                    widget.onChanged(selectedYear, selectedMonth);
-                  });
-                } : null,
+                onPressed: selectedYear > 2020
+                    ? () {
+                        setState(() {
+                          selectedYear--;
+                          widget.onChanged(selectedYear, selectedMonth);
+                        });
+                      }
+                    : null,
                 icon: Icon(Icons.chevron_left, color: widget.primaryColor),
               ),
               Text(
@@ -74,12 +82,14 @@ class _MonthYearPickerWidgetState extends State<MonthYearPickerWidget> {
                 ),
               ),
               IconButton(
-                onPressed: selectedYear < DateTime.now().year ? () {
-                  setState(() {
-                    selectedYear++;
-                    widget.onChanged(selectedYear, selectedMonth);
-                  });
-                } : null,
+                onPressed: selectedYear < DateTime.now().year
+                    ? () {
+                        setState(() {
+                          selectedYear++;
+                          widget.onChanged(selectedYear, selectedMonth);
+                        });
+                      }
+                    : null,
                 icon: Icon(Icons.chevron_right, color: widget.primaryColor),
               ),
             ],
@@ -99,27 +109,33 @@ class _MonthYearPickerWidgetState extends State<MonthYearPickerWidget> {
             itemBuilder: (context, index) {
               final monthIndex = index + 1;
               final isSelected = monthIndex == selectedMonth;
-              final isCurrentMonth = selectedYear == DateTime.now().year && 
-                                   monthIndex == DateTime.now().month;
-              final isFutureMonth = selectedYear == DateTime.now().year && 
-                                   monthIndex > DateTime.now().month;
-              
+              final isCurrentMonth =
+                  selectedYear == DateTime.now().year &&
+                  monthIndex == DateTime.now().month;
+              final isFutureMonth =
+                  selectedYear == DateTime.now().year &&
+                  monthIndex > DateTime.now().month;
+
               return InkWell(
-                onTap: isFutureMonth ? null : () {
-                  setState(() {
-                    selectedMonth = monthIndex;
-                    widget.onChanged(selectedYear, selectedMonth);
-                  });
-                },
+                onTap: isFutureMonth
+                    ? null
+                    : () {
+                        setState(() {
+                          selectedMonth = monthIndex;
+                          widget.onChanged(selectedYear, selectedMonth);
+                        });
+                      },
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: isSelected 
+                    color: isSelected
                         ? widget.primaryColor
-                        : (isCurrentMonth ? widget.primaryColor.withOpacity(0.1) : Colors.transparent),
+                        : (isCurrentMonth
+                              ? widget.primaryColor.withOpacity(0.1)
+                              : Colors.transparent),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: isSelected 
+                      color: isSelected
                           ? widget.primaryColor
                           : Colors.grey.withOpacity(0.3),
                     ),
@@ -128,11 +144,15 @@ class _MonthYearPickerWidgetState extends State<MonthYearPickerWidget> {
                     child: Text(
                       months[index],
                       style: TextStyle(
-                        color: isSelected 
+                        color: isSelected
                             ? Colors.white
-                            : (isFutureMonth ? Colors.grey[400] : Colors.black87),
+                            : (isFutureMonth
+                                  ? Colors.grey[400]
+                                  : Colors.black87),
                         fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
                       ),
                     ),
                   ),
@@ -176,8 +196,13 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
   List<Data> _paginatedData = [];
   bool _isLoadingOverlay = false;
   late DateTimeRange _dateRange;
-  String _selectedFilter = 'All';
-  final List<String> _filters = ['All', 'On Time', 'Overdue'];
+  String _selectedFilter = 'Semua';
+  final List<String> _filters = ['Semua', 'Tepat Waktu', 'Terlambat'];
+  // Extended filter options for the filter modal
+  String _statusFilter =
+      'All'; // All, On Time, Overdue, No Check-in, No Check-out
+  bool _showWeekendOnly = false;
+  bool _showWeekdayOnly = false;
   final List<Color> _avatarColors = [
     Color(0xFFE3F2FD), // Light Blue
     Color(0xFFF3E5F5), // Light Purple
@@ -209,8 +234,32 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
     }
   }
 
+  bool _isWeekend(String dateStr) {
+    try {
+      // Parse date string (format: YYYY-MM-DD)
+      final parts = dateStr.split('-');
+      if (parts.length != 3) return false;
+
+      final year = int.parse(parts[0]);
+      final month = int.parse(parts[1]);
+      final day = int.parse(parts[2]);
+
+      final date = DateTime(year, month, day);
+      final weekday = date.weekday;
+
+      return weekday == DateTime.saturday || weekday == DateTime.sunday;
+    } catch (e) {
+      return false; // If parsing fails, assume it's not weekend
+    }
+  }
+
   bool _isOnTime(String checkInTime) {
     try {
+      // If no check-in time, consider it overdue (unless it's weekend)
+      if (checkInTime == '--:--' || checkInTime.isEmpty) {
+        return false;
+      }
+
       final timeParts = checkInTime.split(':');
       final hours = int.parse(timeParts[0]);
       final minutes = int.parse(timeParts[1]);
@@ -219,6 +268,7 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
       final totalMinutes = hours * 60 + minutes;
       final cutoffMinutes = 7 * 60 + 45; // 07:45 in minutes
 
+      // Weekend exception: Always consider weekend attendance as "on time"
       return totalMinutes <= cutoffMinutes;
     } catch (e) {
       return false; // If there's any error parsing the time, consider it late
@@ -249,19 +299,51 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
   }
 
   List<Data> _getFilteredData() {
-    if (_selectedFilter == 'All' && _searchQuery.isEmpty) return _paginatedData;
+    if (_selectedFilter == 'Semua' &&
+        _searchQuery.isEmpty &&
+        _statusFilter == 'All' &&
+        !_showWeekendOnly &&
+        !_showWeekdayOnly) {
+      return _paginatedData;
+    }
 
     return _paginatedData.where((item) {
+      // Day type filter
+      final isWeekendDay = _isWeekend(item.userId);
+      if (_showWeekendOnly && !isWeekendDay) return false;
+      if (_showWeekdayOnly && isWeekendDay) return false;
+
+      // Status filter (use extended _statusFilter)
       bool matchesFilter = true;
-      if (_selectedFilter != 'All') {
-        final isOnTime = _isOnTime(item.id);
-        matchesFilter = _selectedFilter == 'On Time' ? isOnTime : !isOnTime;
+      if (_statusFilter != 'All') {
+        if (_statusFilter == 'On Time') {
+          // On Time includes: weekend attendance + weekday on time
+          matchesFilter = isWeekendDay || _isOnTime(item.id);
+        } else if (_statusFilter == 'Overdue') {
+          // Overdue only includes: weekday late attendance (weekend never overdue)
+          matchesFilter = !isWeekendDay && !_isOnTime(item.id);
+        } else if (_statusFilter == 'No Check-in') {
+          // No check-in: jam_masuk is empty or --:--
+          matchesFilter = item.id == '--:--' || item.id.isEmpty;
+        } else if (_statusFilter == 'No Check-out') {
+          // No check-out: jam_keluar is empty or --:--
+          matchesFilter = item.title == '--:--' || item.title.isEmpty;
+        }
+      } else if (_selectedFilter != 'Semua') {
+        // Fallback to tab filter if no extended filter
+        if (_selectedFilter == 'Tepat Waktu') {
+          matchesFilter = isWeekendDay || _isOnTime(item.id);
+        } else if (_selectedFilter == 'Terlambat') {
+          matchesFilter = !isWeekendDay && !_isOnTime(item.id);
+        }
       }
 
+      // Search filter
       bool matchesSearch = true;
       if (_searchQuery.isNotEmpty) {
-        matchesSearch =
-            item.userId.toLowerCase().contains(_searchQuery.toLowerCase());
+        matchesSearch = item.userId.toLowerCase().contains(
+          _searchQuery.toLowerCase(),
+        );
       }
 
       return matchesFilter && matchesSearch;
@@ -289,12 +371,14 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
 
       // Use Future.microtask to avoid calling setState during build
       if (mounted) {
-        Future.microtask(() => _fetchData(
-              _dateRange.start.year.toString(),
-              _dateRange.start.month.toString().padLeft(2, '0'),
-              _dateRange.end.year.toString(),
-              _dateRange.end.month.toString().padLeft(2, '0'),
-            ));
+        Future.microtask(
+          () => _fetchData(
+            _dateRange.start.year.toString(),
+            _dateRange.start.month.toString().padLeft(2, '0'),
+            _dateRange.end.year.toString(),
+            _dateRange.end.month.toString().padLeft(2, '0'),
+          ),
+        );
       }
     } catch (e) {
       if (!mounted) return;
@@ -308,11 +392,17 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
     }
   }
 
-  Future<void> _fetchData(String startYear, String startMonth, String endYear,
-      String endMonth) async {
+  Future<void> _fetchData(
+    String startYear,
+    String startMonth,
+    String endYear,
+    String endMonth,
+  ) async {
     if (!mounted) return;
 
-    print('RekapAbsensi: _fetchData called with startYear=$startYear, startMonth=$startMonth, endYear=$endYear, endMonth=$endMonth');
+    print(
+      'RekapAbsensi: _fetchData called with startYear=$startYear, startMonth=$startMonth, endYear=$endYear, endMonth=$endMonth',
+    );
 
     setState(() {
       _isLoadingOverlay = true;
@@ -333,10 +423,10 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
         "month": startMonth,
         "timestamp": DateTime.now().millisecondsSinceEpoch.toString(),
       };
-      
+
       print('RekapAbsensi: API Request URL: $url');
       print('RekapAbsensi: Request Body: $requestBody');
-      
+
       final response = await http
           .post(
             url,
@@ -362,13 +452,17 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
         if (jsonResponse == null) {
           throw Exception('Empty response from server');
         }
-        
-        print('RekapAbsensi: Parsed JSON Response Length: ${(jsonResponse as List).length}');
+
+        print(
+          'RekapAbsensi: Parsed JSON Response Length: ${(jsonResponse as List).length}',
+        );
         if ((jsonResponse as List).isNotEmpty) {
           print('RekapAbsensi: First 3 records:');
           for (int i = 0; i < (jsonResponse as List).length && i < 3; i++) {
             final record = (jsonResponse as List)[i];
-            print('  Record $i: ${record['tanggal']} - ${record['jam_masuk']} - ${record['jam_keluar']}');
+            print(
+              '  Record $i: ${record['tanggal']} - ${record['jam_masuk']} - ${record['jam_keluar']}',
+            );
           }
         }
 
@@ -398,84 +492,390 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
         _paginatedData = [];
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Failed to load data: ${e.toString()}'),
-        backgroundColor: Colors.red,
-        duration: const Duration(seconds: 3),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load data: ${e.toString()}'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
   Future<void> _selectDateRange(BuildContext context) async {
     // Initialize with current selected values
     DateTime? selectedDate = _dateRange.start;
-    
-    await showDialog<DateTime>(
+
+    await showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(
-            'Pilih Bulan dan Tahun',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
             ),
           ),
-          content: Container(
-            height: 300,
-            width: 300,
-            child: MonthYearPickerWidget(
-              initialYear: _dateRange.start.year,
-              initialMonth: _dateRange.start.month,
-              primaryColor: _primaryColor,
-              onChanged: (year, month) {
-                selectedDate = DateTime(year, month);
-              },
-            ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Drag handle
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Title
+              Text(
+                'Pilih Bulan dan Tahun',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Poppins',
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Pilih periode untuk melihat rekap absensi',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  fontFamily: 'Poppins',
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Month Year Picker
+              Container(
+                height: 300,
+                child: MonthYearPickerWidget(
+                  initialYear: _dateRange.start.year,
+                  initialMonth: _dateRange.start.month,
+                  primaryColor: _primaryColor,
+                  onChanged: (year, month) {
+                    selectedDate = DateTime(year, month);
+                  },
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Action buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.grey[600],
+                        side: BorderSide(color: Colors.grey[300]!),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        'Batal',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        if (selectedDate != null) {
+                          final newYear = selectedDate!.year;
+                          final newMonth = selectedDate!.month;
+
+                          // Only update and reload if the selection actually changed
+                          if (newYear != _dateRange.start.year ||
+                              newMonth != _dateRange.start.month) {
+                            setState(() {
+                              _dateRange = DateTimeRange(
+                                start: selectedDate!,
+                                end: selectedDate!,
+                              );
+                            });
+                            print(
+                              'Loading data for: Year=$newYear, Month=$newMonth',
+                            );
+                            _fetchData(
+                              newYear.toString(),
+                              newMonth.toString().padLeft(2, '0'),
+                              newYear.toString(),
+                              newMonth.toString().padLeft(2, '0'),
+                            );
+                          }
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        'Pilih',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(
-                'Batal',
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                if (selectedDate != null) {
-                  final newYear = selectedDate!.year;
-                  final newMonth = selectedDate!.month;
-                  
-                  // Only update and reload if the selection actually changed
-                  if (newYear != _dateRange.start.year || newMonth != _dateRange.start.month) {
-                    setState(() {
-                      _dateRange = DateTimeRange(
-                        start: selectedDate!,
-                        end: selectedDate!,
-                      );
-                    });
-                    print('Loading data for: Year=$newYear, Month=$newMonth');
-                    _fetchData(
-                      newYear.toString(),
-                      newMonth.toString().padLeft(2, '0'),
-                      newYear.toString(),
-                      newMonth.toString().padLeft(2, '0'),
-                    );
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _primaryColor,
-                foregroundColor: Colors.white,
-              ),
-              child: Text('Pilih'),
-            ),
-          ],
         );
       },
+    );
+  }
+
+  void _showFilterModal(BuildContext context) {
+    // Temporary variables to hold the filter state
+    String tempStatusFilter = _statusFilter;
+    bool tempShowWeekendOnly = _showWeekendOnly;
+    bool tempShowWeekdayOnly = _showWeekdayOnly;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Filter Kehadiran',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: Icon(Icons.close, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Status Filter Section
+                  Text(
+                    'Status Kehadiran',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildFilterChip(
+                        label: 'Semua',
+                        isSelected: tempStatusFilter == 'All',
+                        onTap: () =>
+                            setModalState(() => tempStatusFilter = 'All'),
+                      ),
+                      _buildFilterChip(
+                        label: 'Tepat Waktu',
+                        isSelected: tempStatusFilter == 'On Time',
+                        onTap: () =>
+                            setModalState(() => tempStatusFilter = 'On Time'),
+                        color: _primaryColor,
+                      ),
+                      _buildFilterChip(
+                        label: 'Terlambat',
+                        isSelected: tempStatusFilter == 'Overdue',
+                        onTap: () =>
+                            setModalState(() => tempStatusFilter = 'Overdue'),
+                        color: Colors.red,
+                      ),
+                      _buildFilterChip(
+                        label: 'Tidak Masuk',
+                        isSelected: tempStatusFilter == 'No Check-in',
+                        onTap: () => setModalState(
+                          () => tempStatusFilter = 'No Check-in',
+                        ),
+                        color: Colors.orange,
+                      ),
+                      _buildFilterChip(
+                        label: 'Tidak Pulang',
+                        isSelected: tempStatusFilter == 'No Check-out',
+                        onTap: () => setModalState(
+                          () => tempStatusFilter = 'No Check-out',
+                        ),
+                        color: Colors.purple,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Day Type Filter Section
+                  Text(
+                    'Jenis Hari',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildFilterChip(
+                        label: 'Semua Hari',
+                        isSelected:
+                            !tempShowWeekendOnly && !tempShowWeekdayOnly,
+                        onTap: () => setModalState(() {
+                          tempShowWeekendOnly = false;
+                          tempShowWeekdayOnly = false;
+                        }),
+                      ),
+                      _buildFilterChip(
+                        label: 'Hari Kerja',
+                        isSelected: tempShowWeekdayOnly,
+                        onTap: () => setModalState(() {
+                          tempShowWeekdayOnly = true;
+                          tempShowWeekendOnly = false;
+                        }),
+                        color: Colors.blue,
+                      ),
+                      _buildFilterChip(
+                        label: 'Weekend',
+                        isSelected: tempShowWeekendOnly,
+                        onTap: () => setModalState(() {
+                          tempShowWeekendOnly = true;
+                          tempShowWeekdayOnly = false;
+                        }),
+                        color: Colors.teal,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Action Buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            setModalState(() {
+                              tempStatusFilter = 'All';
+                              tempShowWeekendOnly = false;
+                              tempShowWeekdayOnly = false;
+                            });
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.grey[600],
+                            side: BorderSide(color: Colors.grey[300]!),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: Text('Reset'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _statusFilter = tempStatusFilter;
+                              _showWeekendOnly = tempShowWeekendOnly;
+                              _showWeekdayOnly = tempShowWeekdayOnly;
+                              // Sync with the tab filter
+                              if (tempStatusFilter == 'All' ||
+                                  tempStatusFilter == 'On Time' ||
+                                  tempStatusFilter == 'Overdue') {
+                                _selectedFilter = tempStatusFilter;
+                              } else {
+                                _selectedFilter = 'All';
+                              }
+                            });
+                            Navigator.pop(context);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _primaryColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: Text('Terapkan Filter'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildFilterChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+    Color? color,
+  }) {
+    final effectiveColor = color ?? _primaryColor;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? effectiveColor : Colors.grey[100],
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? effectiveColor : Colors.grey[300]!,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: isSelected ? Colors.white : Colors.grey[700],
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+          ),
+        ),
+      ),
     );
   }
 
@@ -502,35 +902,15 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
         ),
         leading: IconButton(
           padding: EdgeInsets.only(left: 16),
-          icon: Icon(
-            Icons.chevron_left,
-            color: Colors.white,
-            size: 32,
-          ),
+          icon: Icon(Icons.chevron_left, color: Colors.white, size: 32),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Padding(
-          padding: EdgeInsets.only(top: 8), // Add some top padding to the title
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                'Absence Management',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              Text(
-                '${DateFormat('MMMM yyyy').format(_dateRange.start)}',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-            ],
+        title: Text(
+          'Rekap Kehadiran',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
@@ -551,8 +931,10 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                     borderRadius: BorderRadius.circular(8),
                     onTap: () => _selectDateRange(context),
                     child: Padding(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -565,7 +947,10 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                               ),
                               SizedBox(width: 12),
                               Text(
-                                '${DateFormat('dd MMM yyyy').format(_dateRange.start)} - ${DateFormat('dd MMM yyyy').format(_dateRange.end)}',
+                                DateFormat(
+                                  'MMMM yyyy',
+                                  'id',
+                                ).format(_dateRange.start),
                                 style: TextStyle(
                                   fontSize: 16,
                                   color: Colors.black87,
@@ -607,7 +992,7 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                             color: Colors.grey[800],
                           ),
                           decoration: InputDecoration(
-                            hintText: 'Search here....',
+                            hintText: 'Cari tanggal....',
                             hintStyle: TextStyle(
                               color: Colors.grey[500],
                               fontSize: 14,
@@ -619,7 +1004,9 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                             ),
                             border: InputBorder.none,
                             contentPadding: EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 12),
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
                           ),
                         ),
                       ),
@@ -634,14 +1021,43 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                         child: InkWell(
                           borderRadius: BorderRadius.circular(8),
                           onTap: () {
-                            // Handle filter action
+                            _showFilterModal(context);
                           },
                           child: Padding(
                             padding: EdgeInsets.symmetric(horizontal: 12),
-                            child: Icon(
-                              Icons.tune,
-                              color: Colors.grey[600],
-                              size: 20,
+                            child: Stack(
+                              children: [
+                                Icon(
+                                  Icons.tune,
+                                  color:
+                                      (_statusFilter != 'All' ||
+                                          _showWeekendOnly ||
+                                          _showWeekdayOnly)
+                                      ? _primaryColor
+                                      : Colors.grey[600],
+                                  size: 20,
+                                ),
+                                // Active filter indicator
+                                if (_statusFilter != 'All' ||
+                                    _showWeekendOnly ||
+                                    _showWeekdayOnly)
+                                  Positioned(
+                                    top: 0,
+                                    right: 0,
+                                    child: Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: _primaryColor,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                         ),
@@ -662,16 +1078,26 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                           // Apply search filter if there's a search query
                           bool matchesSearch = true;
                           if (_searchQuery.isNotEmpty) {
-                            matchesSearch = item.userId.toLowerCase().contains(_searchQuery.toLowerCase());
+                            matchesSearch = item.userId.toLowerCase().contains(
+                              _searchQuery.toLowerCase(),
+                            );
                           }
-                          
+
                           // Apply tab filter
                           bool matchesFilter = true;
-                          if (filter != 'All') {
-                            final isOnTime = _isOnTime(item.id);
-                            matchesFilter = filter == 'On Time' ? isOnTime : !isOnTime;
+                          if (filter != 'Semua') {
+                            final isWeekendDay = _isWeekend(item.userId);
+                            if (filter == 'Tepat Waktu') {
+                              // On Time includes: weekend attendance + weekday on time
+                              matchesFilter =
+                                  isWeekendDay || _isOnTime(item.id);
+                            } else if (filter == 'Terlambat') {
+                              // Overdue only includes: weekday late attendance (weekend never overdue)
+                              matchesFilter =
+                                  !isWeekendDay && !_isOnTime(item.id);
+                            }
                           }
-                          
+
                           return matchesSearch && matchesFilter;
                         })
                         .length
@@ -698,35 +1124,43 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                filter,
-                                style: TextStyle(
-                                  color: isSelected
-                                      ? Color.fromRGBO(1, 101, 65, 1)
-                                      : Colors.grey[600],
-                                  fontWeight: isSelected
-                                      ? FontWeight.w600
-                                      : FontWeight.normal,
+                              Flexible(
+                                child: Text(
+                                  filter,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isSelected
+                                        ? Color.fromRGBO(1, 101, 65, 1)
+                                        : Colors.grey[600],
+                                    fontWeight: isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                  ),
                                 ),
                               ),
                               SizedBox(width: 4),
                               Container(
                                 padding: EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: filter == 'All'
+                                  color: filter == 'Semua'
                                       ? Color.fromRGBO(1, 101, 65, 1)
-                                      : filter == 'On Time'
-                                          ? Color.fromRGBO(1, 101, 65, 1)
-                                          : Colors.red,
+                                      : filter == 'Tepat Waktu'
+                                      ? Color.fromRGBO(1, 101, 65, 1)
+                                      : Colors.red,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
                                   count,
                                   style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: 12,
+                                    fontSize: 10,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
@@ -752,6 +1186,11 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                   itemBuilder: (context, index) {
                     final item = _getFilteredData()[index];
 
+                    final isWeekendDay = _isWeekend(item.userId);
+                    final isOnTimeStatus = isWeekendDay
+                        ? true
+                        : _isOnTime(item.id); // Weekend always "on time"
+
                     return Container(
                       margin: EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
@@ -776,15 +1215,21 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                               height: 48,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: _isOnTime(item.id)
+                                color: isWeekendDay
+                                    ? Colors.blue[100] // Blue for weekend
+                                    : isOnTimeStatus
                                     ? Color.fromRGBO(1, 101, 65, 0.1)
                                     : Colors.red[50],
                               ),
                               child: Center(
                                 child: Icon(
-                                  Icons.fingerprint,
+                                  isWeekendDay
+                                      ? Icons.weekend
+                                      : Icons.fingerprint,
                                   size: 28,
-                                  color: _isOnTime(item.id)
+                                  color: isWeekendDay
+                                      ? Colors.blue[800] // Blue for weekend
+                                      : isOnTimeStatus
                                       ? Color.fromRGBO(1, 101, 65, 1)
                                       : Colors.red,
                                 ),
@@ -796,17 +1241,44 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    item.userId,
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.black87,
-                                    ),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        item.userId,
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                      if (isWeekendDay) ...[
+                                        SizedBox(width: 8),
+                                        Container(
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue[100],
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            'Weekend',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.blue[800],
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                   SizedBox(height: 4),
                                   Text(
-                                    'Hari Kerja',
+                                    isWeekendDay ? 'Hari Libur' : 'Hari Kerja',
                                     style: TextStyle(
                                       fontSize: 14,
                                       color: Colors.grey[600],
@@ -818,7 +1290,9 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                                       Icon(
                                         Icons.schedule,
                                         size: 14,
-                                        color: _isOnTime(item.id)
+                                        color: isWeekendDay
+                                            ? Colors.blue[600]
+                                            : isOnTimeStatus
                                             ? Colors.grey[600]
                                             : Colors.red[400],
                                       ),
@@ -827,7 +1301,9 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                                         item.id,
                                         style: TextStyle(
                                           fontSize: 14,
-                                          color: _isOnTime(item.id)
+                                          color: isWeekendDay
+                                              ? Colors.blue[600]
+                                              : isOnTimeStatus
                                               ? Colors.grey[600]
                                               : Colors.red[400],
                                         ),
@@ -856,9 +1332,14 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                             // Status
                             Container(
                               padding: EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
-                                color: _isOnTime(item.id)
+                                color: isWeekendDay
+                                    ? Colors
+                                          .blue[100] // Blue background for weekend
+                                    : isOnTimeStatus
                                     ? Color.fromRGBO(1, 101, 65, 0.1)
                                     : Colors.red[50],
                                 borderRadius: BorderRadius.circular(12),
@@ -871,17 +1352,27 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                                     height: 6,
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
-                                      color: _isOnTime(item.id)
+                                      color: isWeekendDay
+                                          ? Colors
+                                                .blue[800] // Blue dot for weekend
+                                          : isOnTimeStatus
                                           ? Color.fromRGBO(1, 101, 65, 1)
                                           : Colors.red,
                                     ),
                                   ),
                                   SizedBox(width: 4),
                                   Text(
-                                    _isOnTime(item.id) ? 'On Time' : 'Overdue',
+                                    isWeekendDay
+                                        ? 'Weekend'
+                                        : (isOnTimeStatus
+                                              ? 'Tepat Waktu'
+                                              : 'Terlambat'),
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: _isOnTime(item.id)
+                                      color: isWeekendDay
+                                          ? Colors
+                                                .blue[800] // Blue text for weekend
+                                          : isOnTimeStatus
                                           ? Color.fromRGBO(1, 101, 65, 1)
                                           : Colors.red,
                                     ),
@@ -901,9 +1392,7 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
           if (_isLoadingOverlay)
             Container(
               color: Colors.black.withOpacity(0.3),
-              child: Center(
-                child: CircularProgressIndicator(),
-              ),
+              child: Center(child: CircularProgressIndicator()),
             ),
         ],
       ),

@@ -14,7 +14,7 @@ if (localPropertiesFile.exists()) {
 
 def flutterRoot = localProperties.getProperty('flutter.sdk')
 if (flutterRoot == null) {
-    throw new GradleException("Flutter SDK not found. Define location with flutter.sdk in the local.properties file.")
+    throw new FileNotFoundException("Flutter SDK not found. Define location with flutter.sdk in the local.properties file.")
 }
 
 def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
@@ -34,9 +34,9 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace "com.example.monitoring_project"
+    namespace "id.basitd.absensi.mobile"
     compileSdk 35
-    ndkVersion flutter.ndkVersion
+    ndkVersion "26.1.10909125"  // Explicit NDK version for symbol stripping
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -52,19 +52,14 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.example.monitoring_project"
-        minSdk 29  // Android 10+ for optimal security (was 23)
+        applicationId "id.basitd.absensi.mobile"
+        minSdk 28  // Android 9 (Pie) and above
         targetSdk flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         
         // Add multiDex support for large apps
         multiDexEnabled true
-        
-        // NDK configuration
-        ndk {
-            debugSymbolLevel 'NONE'
-        }
     }
 
     signingConfigs {
@@ -90,11 +85,6 @@ android {
             signingConfig signingConfigs.release
             minifyEnabled false
             shrinkResources false
-            
-            // Disable debug symbol stripping completely
-            ndk {
-                debugSymbolLevel 'NONE'
-            }
         }
         
         debug {

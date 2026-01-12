@@ -16,6 +16,7 @@ import 'bloc/notification/notification_bloc.dart';
 import 'bloc/notification/notification_event.dart';
 import 'repository/notification_repository.dart';
 import 'screens/page_login.dart';
+import 'screens/page_splashscreen.dart';
 import 'firebase_options.dart';
 
 class MyHttpOverrides extends HttpOverrides {
@@ -39,13 +40,15 @@ void main() async {
   final attendanceRecapRepository = AttendanceRecapRepository();
   final notificationRepository = NotificationRepository(preferences: prefs);
 
-  runApp(MyApp(
-    loginRepository: loginRepository,
-    presenceRepository: presenceRepository,
-    homeRepository: homeRepository,
-    attendanceRecapRepository: attendanceRecapRepository,
-    notificationRepository: notificationRepository,
-  ));
+  runApp(
+    MyApp(
+      loginRepository: loginRepository,
+      presenceRepository: presenceRepository,
+      homeRepository: homeRepository,
+      attendanceRecapRepository: attendanceRecapRepository,
+      notificationRepository: notificationRepository,
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -79,9 +82,8 @@ class MyApp extends StatelessWidget {
           create: (context) => HomeBloc(homeRepository: homeRepository),
         ),
         BlocProvider(
-          create: (context) => AttendanceRecapBloc(
-            repository: attendanceRecapRepository,
-          ),
+          create: (context) =>
+              AttendanceRecapBloc(repository: attendanceRecapRepository),
         ),
         BlocProvider(
           create: (context) {
@@ -106,9 +108,7 @@ class MyApp extends StatelessWidget {
             floatingLabelStyle: const TextStyle(
               color: Color.fromRGBO(1, 101, 65, 1),
             ),
-            labelStyle: TextStyle(
-              color: Colors.grey[600],
-            ),
+            labelStyle: TextStyle(color: Colors.grey[600]),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 25,
               vertical: 25,
@@ -120,11 +120,7 @@ class MyApp extends StatelessWidget {
             elevation: 0,
           ),
         ),
-        home: BlocBuilder<LoginBloc, LoginState>(
-          builder: (context, state) {
-            return const Login();
-          },
-        ),
+        home: const SplashScreen(),
       ),
     );
   }

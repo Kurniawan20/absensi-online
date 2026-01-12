@@ -6,17 +6,20 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:android_id/android_id.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:local_auth/local_auth.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import '../bloc/login/login_bloc.dart';
 import '../bloc/login/login_event.dart';
 import '../bloc/login/login_state.dart';
-import '../widget/dialogs.dart';
+
 import './main_layout.dart';
 import '../services/biometric_service.dart';
 import '../services/secure_storage_service.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../services/session_manager.dart';
+
 import '../utils/storage_config.dart';
+import './reset_device_page.dart';
 
 class Login extends StatefulWidget {
   const Login({Key? key}) : super(key: key);
@@ -33,6 +36,8 @@ class _LoginState extends State<Login> {
   final FocusNode textFieldFocusNode = FocusNode();
   final BiometricService _biometricService = BiometricService();
   final SecureStorageService _secureStorage = SecureStorageService();
+  final FocusNode _nrkFocusNode = FocusNode();
+  final FocusNode _passwordFocusNode = FocusNode();
 
   bool _passwordVisible = false;
   String _androidId = 'Unknown';
@@ -40,10 +45,15 @@ class _LoginState extends State<Login> {
   bool _isBiometricAvailable = false;
   bool _showBiometricButton = false;
   bool _biometricEnabled = false;
+  String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ));
     _initializeData();
   }
 
@@ -52,6 +62,16 @@ class _LoginState extends State<Login> {
     await _getUserCurrentLocation();
     await _initializeBiometric();
     context.read<LoginBloc>().add(InitializeLoginData());
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() {
+        _appVersion = packageInfo.version;
+      });
+    }
   }
 
   Future<void> _initializeBiometric() async {
@@ -79,6 +99,8 @@ class _LoginState extends State<Login> {
 
     // Add listener to email field after initialization
     txtEditEmail.addListener(_onEmailChanged);
+    _nrkFocusNode.addListener(() => setState(() {}));
+    _passwordFocusNode.addListener(() => setState(() {}));
   }
 
   void _onEmailChanged() async {
@@ -108,6 +130,8 @@ class _LoginState extends State<Login> {
     txtEditEmail.removeListener(_onEmailChanged);
     txtEditEmail.dispose();
     txtEditPwd.dispose();
+    _nrkFocusNode.dispose();
+    _passwordFocusNode.dispose();
     super.dispose();
   }
 
@@ -188,6 +212,175 @@ class _LoginState extends State<Login> {
       textColor: Colors.white,
       fontSize: 16.0,
     );
+  }
+
+  void _showDeviceMismatchDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.smartphone,
+                  color: Colors.red,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Perangkat Tidak Sesuai',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Akun Anda terdaftar pada perangkat lain.',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[800],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Kemungkinan penyebab:',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey[700],
+                ),
+              ),
+              const SizedBox(height: 8),
+              _buildDeviceDialogBullet(
+                  'Anda login dari perangkat yang berbeda'),
+              _buildDeviceDialogBullet(
+                  'Perangkat Anda telah di-reset atau diganti'),
+              _buildDeviceDialogBullet(
+                  'Terjadi perubahan pada identitas perangkat'),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color.fromRGBO(1, 101, 65, 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color.fromRGBO(1, 101, 65, 0.3),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.info_outline,
+                      color: Color.fromRGBO(1, 101, 65, 1),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Untuk mereset perangkat, silakan hubungi Kantor Pusat Bank.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[800],
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color.fromRGBO(1, 101, 65, 1),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  'Mengerti',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDeviceDialogBullet(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 6),
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(
+              color: Colors.grey[600],
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey[700],
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _isDeviceMismatchError(String error) {
+    final lowerError = error.toLowerCase();
+    return lowerError.contains('device') ||
+        lowerError.contains('perangkat') ||
+        lowerError.contains('mismatch') ||
+        lowerError.contains('tidak sesuai') ||
+        lowerError.contains('tidak terdaftar') ||
+        lowerError.contains('different device') ||
+        lowerError.contains('device_id');
   }
 
   void _validateInputs({bool isBiometricLogin = false}) {
@@ -321,13 +514,13 @@ class _LoginState extends State<Login> {
     final isBiometricEnabled = await _secureStorage.isBiometricEnabled();
     if (isBiometricEnabled) {
       final currentCredentials = await _secureStorage.getCredentials();
-      final isNewUser = currentCredentials == null || 
-                       currentCredentials['email'] != email;
-      
+      final isNewUser =
+          currentCredentials == null || currentCredentials['email'] != email;
+
       if (isNewUser) {
         print('Updating biometric credentials for new user');
         await _secureStorage.saveCredentials(email, password);
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -405,7 +598,7 @@ class _LoginState extends State<Login> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Login sidik jari telah diaktifkan'),
+                content: Text('Login  biometrik telah diaktifkan'),
                 backgroundColor: Color.fromRGBO(1, 101, 65, 1),
                 behavior: SnackBarBehavior.floating,
                 shape: RoundedRectangleBorder(
@@ -418,6 +611,9 @@ class _LoginState extends State<Login> {
         }
       }
     }
+
+    // Initialize session manager for new login
+    SessionManager.initializeSession();
 
     // Navigate to main layout
     if (mounted) {
@@ -436,20 +632,18 @@ class _LoginState extends State<Login> {
       listener: (context, state) {
         if (state is LoginLoading) {
           print('Login loading state');
-          Dialogs.loading(context, GlobalKey<State>(), "Proses...");
+          // Loading is now handled by the button itself
         } else if (state is LoginSuccess) {
           print('Login success state');
-          // Handle the loading dialog dismissal safely
-          if (Navigator.canPop(context)) {
-            Navigator.of(context, rootNavigator: true).pop();
-          }
           _handleSuccessfulLogin();
         } else if (state is LoginFailure) {
           print('Login failure state: ${state.error}');
-          if (Navigator.canPop(context)) {
-            Navigator.of(context, rootNavigator: true).pop();
+          // Check if the error is a device mismatch error
+          if (_isDeviceMismatchError(state.error)) {
+            _showDeviceMismatchDialog();
+          } else {
+            _fireToast(state.error);
           }
-          _fireToast(state.error);
         } else if (state is LoginLocationError) {
           print('Login location error state: ${state.error}');
           _showDialogWarning(state.error);
@@ -457,79 +651,72 @@ class _LoginState extends State<Login> {
       },
       child: Scaffold(
         backgroundColor: Colors.white,
-        body: SafeArea(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 60),
-                    // Logo
-                    Center(
-                      child: Container(
-                        width: 90,
-                        height: 90,
-                        decoration: BoxDecoration(
-                          // color: Color.fromRGBO(1, 101, 65, 1),
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Image.asset("assets/images/ic_launcher.png",
-                            height: 50),
-                      ),
-                    ),
-                    const SizedBox(height: 40),
-                    // Welcome Text
-                    RichText(
-                      text: TextSpan(
-                        style: TextStyle(
-                          fontSize: 30,
-                          fontFamily: 'Poppins',
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black,
-                          height: 1.2,
-                        ),
-                        children: [
-                          TextSpan(text: 'Selamat Datang '),
-                          TextSpan(text: '👋'),
-                          TextSpan(text: '\ndi '),
-                          TextSpan(
-                            text: 'HABA',
-                            style: TextStyle(
-                              color: Color.fromRGBO(1, 101, 65, 1),
-                              fontFamily: 'Poppins',
-                              fontWeight: FontWeight.w800,
-                            ),
+        body: GestureDetector(
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 40),
+                      // Logo
+                      Center(
+                        child: Container(
+                          width: 90,
+                          height: 90,
+                          decoration: BoxDecoration(
+                            // color: Color.fromRGBO(1, 101, 65, 1),
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Silahkan masuk untuk melanjutkan',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontFamily: 'Poppins',
-                        color: Colors.grey[500],
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                    const SizedBox(height: 40),
-                    // Email Field
-                    Container(
-                      height: 65,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Color.fromRGBO(1, 101, 65, 0.3),
-                          width: 1.5,
+                          child: Image.asset("assets/images/ic_launcher.png",
+                              height: 50),
                         ),
                       ),
-                      child: TextFormField(
+                      const SizedBox(height: 24),
+                      // Welcome Text
+                      RichText(
+                        text: TextSpan(
+                          style: TextStyle(
+                            fontSize: 30,
+                            fontFamily: 'Poppins',
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black,
+                            height: 1.2,
+                          ),
+                          children: [
+                            TextSpan(text: 'Selamat Datang '),
+                            TextSpan(text: '👋'),
+                            TextSpan(text: '\ndi '),
+                            TextSpan(
+                              text: 'HABA',
+                              style: TextStyle(
+                                color: Color.fromRGBO(1, 101, 65, 1),
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Silahkan masuk untuk melanjutkan',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontFamily: 'Poppins',
+                          color: Colors.grey[500],
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      // Email Field
+                      // Email Field
+                      TextFormField(
                         style: const TextStyle(
                           fontSize: 16,
                           color: Colors.black87,
@@ -540,30 +727,65 @@ class _LoginState extends State<Login> {
                             color: Colors.grey[600],
                             fontSize: 16,
                           ),
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          errorBorder: InputBorder.none,
-                          focusedErrorBorder: InputBorder.none,
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color.fromRGBO(1, 101, 65, 0.3),
+                              width: 1.5,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color.fromRGBO(1, 101, 65, 0.3),
+                              width: 1.5,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color.fromRGBO(1, 101, 65, 1),
+                              width: 1.5,
+                            ),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Colors.red,
+                              width: 1.5,
+                            ),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Colors.red,
+                              width: 1.5,
+                            ),
+                          ),
                           isDense: true,
                           contentPadding: EdgeInsets.symmetric(
                             horizontal: 25,
                             vertical: 20,
                           ),
                           prefixIcon: Padding(
-                            padding: EdgeInsets.only(left: 15, right: 10),
+                            padding: const EdgeInsets.only(left: 15, right: 10),
                             child: Icon(
                               Icons.person_outline_rounded,
-                              color: Color.fromRGBO(1, 101, 65, 1),
+                              color: _nrkFocusNode.hasFocus
+                                  ? const Color.fromRGBO(1, 101, 65, 1)
+                                  : Colors.grey,
                               size: 24,
                             ),
                           ),
-                          prefixIconConstraints: BoxConstraints(
+                          prefixIconConstraints: const BoxConstraints(
                             minWidth: 25,
                             minHeight: 25,
                           ),
                         ),
                         controller: txtEditEmail,
+                        focusNode: _nrkFocusNode,
                         validator: (value) {
                           if (value == null || value.isEmpty) {
                             return 'NPP tidak boleh kosong';
@@ -571,20 +793,10 @@ class _LoginState extends State<Login> {
                           return null;
                         },
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    // Password Field
-                    Container(
-                      height: 65,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Color.fromRGBO(1, 101, 65, 0.3),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: TextFormField(
+                      const SizedBox(height: 16),
+                      // Password Field
+                      // Password Field
+                      TextFormField(
                         style: const TextStyle(
                           fontSize: 16,
                           color: Colors.black87,
@@ -595,36 +807,72 @@ class _LoginState extends State<Login> {
                             color: Colors.grey[600],
                             fontSize: 16,
                           ),
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          errorBorder: InputBorder.none,
-                          focusedErrorBorder: InputBorder.none,
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color.fromRGBO(1, 101, 65, 0.3),
+                              width: 1.5,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color.fromRGBO(1, 101, 65, 0.3),
+                              width: 1.5,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color.fromRGBO(1, 101, 65, 1),
+                              width: 1.5,
+                            ),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Colors.red,
+                              width: 1.5,
+                            ),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Colors.red,
+                              width: 1.5,
+                            ),
+                          ),
                           isDense: true,
                           contentPadding: EdgeInsets.symmetric(
                             horizontal: 25,
                             vertical: 20,
                           ),
                           prefixIcon: Padding(
-                            padding: EdgeInsets.only(left: 15, right: 10),
+                            padding: const EdgeInsets.only(left: 15, right: 10),
                             child: Icon(
                               Icons.lock_outline_rounded,
-                              color: Color.fromRGBO(1, 101, 65, 1),
+                              color: _passwordFocusNode.hasFocus
+                                  ? const Color.fromRGBO(1, 101, 65, 1)
+                                  : Colors.grey,
                               size: 24,
                             ),
                           ),
-                          prefixIconConstraints: BoxConstraints(
+                          prefixIconConstraints: const BoxConstraints(
                             minWidth: 25,
                             minHeight: 25,
                           ),
                           suffixIcon: Padding(
-                            padding: EdgeInsets.only(right: 10),
+                            padding: const EdgeInsets.only(right: 10),
                             child: IconButton(
                               icon: Icon(
                                 _passwordVisible
                                     ? Icons.visibility_outlined
                                     : Icons.visibility_off_outlined,
-                                color: Color.fromRGBO(1, 101, 65, 1),
+                                color: _passwordFocusNode.hasFocus
+                                    ? const Color.fromRGBO(1, 101, 65, 1)
+                                    : Colors.grey,
                                 size: 24,
                               ),
                               onPressed: _toggleObscured,
@@ -632,6 +880,7 @@ class _LoginState extends State<Login> {
                           ),
                         ),
                         controller: txtEditPwd,
+                        focusNode: _passwordFocusNode,
                         obscureText: !_passwordVisible,
                         enableSuggestions: false,
                         autocorrect: false,
@@ -642,209 +891,32 @@ class _LoginState extends State<Login> {
                           return null;
                         },
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    // Forgot Password
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: () {
-                          showGeneralDialog(
-                            context: context,
-                            pageBuilder: (context, animation1, animation2) =>
-                                Container(),
-                            transitionBuilder:
-                                (context, animation1, animation2, child) {
-                              return Transform.scale(
-                                scale: Curves.easeInOut
-                                    .transform(animation1.value),
-                                child: Dialog(
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  elevation: 0,
-                                  backgroundColor: Colors.transparent,
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 300),
-                                    curve: Curves.easeInOut,
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(20),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.1),
-                                          spreadRadius: 5,
-                                          blurRadius: 15,
-                                          offset: const Offset(0, 3),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Hero(
-                                          tag: 'forgotPasswordIcon',
-                                          child: Container(
-                                            width: 70,
-                                            height: 70,
-                                            decoration: BoxDecoration(
-                                              color: const Color.fromRGBO(
-                                                  1, 101, 65, 0.1),
-                                              borderRadius:
-                                                  BorderRadius.circular(35),
-                                            ),
-                                            child: const Icon(
-                                              Icons.lock_reset_rounded,
-                                              size: 35,
-                                              color:
-                                                  Color.fromRGBO(1, 101, 65, 1),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 20),
-                                        const Text(
-                                          'Lupa Kata Sandi?',
-                                          style: TextStyle(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.black87,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 15),
-                                        const Text(
-                                          'Untuk mengatur ulang kata sandi, silakan hubungi administrator Bank Aceh Syariah atau kunjungi kantor cabang terdekat.',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.black54,
-                                            height: 1.5,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 25),
-                                        SizedBox(
-                                          width: double.infinity,
-                                          height: 45,
-                                          child: ElevatedButton(
-                                            onPressed: () {
-                                              Navigator.of(context).pop();
-                                            },
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  const Color.fromRGBO(
-                                                      1, 101, 65, 1),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(12),
-                                              ),
-                                              elevation: 0,
-                                            ),
-                                            child: const Text(
-                                              'Mengerti',
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w500,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                      const SizedBox(height: 8),
+                      // Forgot Password
+                      // Forgot Password
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // Reset Device - Left side
+                          TextButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const ResetDevicePage(),
                                 ),
                               );
                             },
-                            transitionDuration:
-                                const Duration(milliseconds: 300),
-                          );
-                        },
-                        style: TextButton.styleFrom(
-                          foregroundColor: const Color.fromRGBO(1, 101, 65, 1),
-                          padding: const EdgeInsets.symmetric(horizontal: 25.0),
-                        ),
-                        child: const Text(
-                          'Lupa Kata Sandi?',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    // Login Buttons Column
-                    Column(
-                      children: [
-                        // Regular login button
-                        SizedBox(
-                          width: double.infinity,
-                          height: 56,
-                          child: ElevatedButton(
-                            onPressed: _validateInputs,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Color.fromRGBO(1, 101, 65, 1),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              elevation: 0,
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.grey[600],
+                              padding: EdgeInsets.zero,
                             ),
-                            child: Text(
-                              'Masuk',
+                            child: const Text(
+                              'Reset Device?',
                               style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
                               ),
-                            ),
-                          ),
-                        ),
-                        // Fingerprint button (if available)
-                        if (_showBiometricButton) ...[
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 56,
-                            child: OutlinedButton.icon(
-                              onPressed: _authenticateWithBiometric,
-                              icon: const Icon(
-                                Icons.fingerprint,
-                                size: 24,
-                                color: Color.fromRGBO(1, 101, 65, 1),
-                              ),
-                              label: const Text(
-                                'Masuk dengan Biometric',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color.fromRGBO(1, 101, 65, 1),
-                                ),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(
-                                  color: Color.fromRGBO(1, 101, 65, 1),
-                                  width: 1.5,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    // Register Text
-                    Center(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text(
-                            'Belum punya akun?',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.black54,
                             ),
                           ),
                           TextButton(
@@ -888,7 +960,7 @@ class _LoginState extends State<Login> {
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Hero(
-                                              tag: 'registerIcon',
+                                              tag: 'forgotPasswordIcon',
                                               child: Container(
                                                 width: 70,
                                                 height: 70,
@@ -899,7 +971,7 @@ class _LoginState extends State<Login> {
                                                       BorderRadius.circular(35),
                                                 ),
                                                 child: const Icon(
-                                                  Icons.person_add_rounded,
+                                                  Icons.lock_reset_rounded,
                                                   size: 35,
                                                   color: Color.fromRGBO(
                                                       1, 101, 65, 1),
@@ -908,7 +980,7 @@ class _LoginState extends State<Login> {
                                             ),
                                             const SizedBox(height: 20),
                                             const Text(
-                                              'Daftar Akun Baru',
+                                              'Lupa Kata Sandi?',
                                               style: TextStyle(
                                                 fontSize: 20,
                                                 fontWeight: FontWeight.bold,
@@ -917,7 +989,7 @@ class _LoginState extends State<Login> {
                                             ),
                                             const SizedBox(height: 15),
                                             const Text(
-                                              'Untuk mendaftar akun baru, silakan kunjungi kantor Bank Aceh Syariah terdekat dengan membawa kartu identitas yang masih berlaku.',
+                                              'Untuk mengatur ulang kata sandi, silakan hubungi Kantor Pusat.',
                                               textAlign: TextAlign.center,
                                               style: TextStyle(
                                                 fontSize: 14,
@@ -968,22 +1040,288 @@ class _LoginState extends State<Login> {
                               foregroundColor:
                                   const Color.fromRGBO(1, 101, 65, 1),
                               padding: EdgeInsets.zero,
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
                             child: const Text(
-                              ' Daftar',
+                              'Lupa Kata Sandi?',
                               style: TextStyle(
                                 fontSize: 14,
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
+                      const SizedBox(height: 24),
+                      // Login Buttons Column
+                      Column(
+                        children: [
+                          // Regular login button
+                          SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: BlocBuilder<LoginBloc, LoginState>(
+                              builder: (context, state) {
+                                return state is LoginLoading
+                                    ? ElevatedButton(
+                                        onPressed: () {},
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color.fromRGBO(
+                                              1, 101, 65, 1),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          elevation: 0,
+                                        ),
+                                        child: const SizedBox(
+                                          height: 24,
+                                          width: 24,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                      )
+                                    : ElevatedButton(
+                                        onPressed: _validateInputs,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color.fromRGBO(
+                                              1, 101, 65, 1),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          elevation: 0,
+                                        ),
+                                        child: const Text(
+                                          'Masuk',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      );
+                              },
+                            ),
+                          ),
+                          // Fingerprint button (if available)
+                          if (_showBiometricButton) ...[
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 56,
+                              child: OutlinedButton.icon(
+                                onPressed: _authenticateWithBiometric,
+                                icon: const Icon(
+                                  Icons.fingerprint,
+                                  size: 24,
+                                  color: Color.fromRGBO(1, 101, 65, 1),
+                                ),
+                                label: const Text(
+                                  'Masuk dengan Biometric',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color.fromRGBO(1, 101, 65, 1),
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(
+                                    color: Color.fromRGBO(1, 101, 65, 1),
+                                    width: 1.5,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      // Register Text
+                      Center(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text(
+                              'Belum punya akun?',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.black54,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                showGeneralDialog(
+                                  context: context,
+                                  pageBuilder:
+                                      (context, animation1, animation2) =>
+                                          Container(),
+                                  transitionBuilder:
+                                      (context, animation1, animation2, child) {
+                                    return Transform.scale(
+                                      scale: Curves.easeInOut
+                                          .transform(animation1.value),
+                                      child: Dialog(
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                        ),
+                                        elevation: 0,
+                                        backgroundColor: Colors.transparent,
+                                        child: AnimatedContainer(
+                                          duration:
+                                              const Duration(milliseconds: 300),
+                                          curve: Curves.easeInOut,
+                                          padding: const EdgeInsets.all(20),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius:
+                                                BorderRadius.circular(20),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black
+                                                    .withOpacity(0.1),
+                                                spreadRadius: 5,
+                                                blurRadius: 15,
+                                                offset: const Offset(0, 3),
+                                              ),
+                                            ],
+                                          ),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Hero(
+                                                tag: 'registerIcon',
+                                                child: Container(
+                                                  width: 70,
+                                                  height: 70,
+                                                  decoration: BoxDecoration(
+                                                    color: const Color.fromRGBO(
+                                                        1, 101, 65, 0.1),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            35),
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.person_add_rounded,
+                                                    size: 35,
+                                                    color: Color.fromRGBO(
+                                                        1, 101, 65, 1),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 20),
+                                              const Text(
+                                                'Daftar Akun Baru',
+                                                style: TextStyle(
+                                                  fontSize: 20,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.black87,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 15),
+                                              const Text(
+                                                'Untuk mendaftar akun, silakan hubungi kantor pusat',
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  color: Colors.black54,
+                                                  height: 1.5,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 25),
+                                              SizedBox(
+                                                width: double.infinity,
+                                                height: 45,
+                                                child: ElevatedButton(
+                                                  onPressed: () {
+                                                    Navigator.of(context).pop();
+                                                  },
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        const Color.fromRGBO(
+                                                            1, 101, 65, 1),
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              12),
+                                                    ),
+                                                    elevation: 0,
+                                                  ),
+                                                  child: const Text(
+                                                    'Mengerti',
+                                                    style: TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  transitionDuration:
+                                      const Duration(milliseconds: 300),
+                                );
+                              },
+                              style: TextButton.styleFrom(
+                                foregroundColor:
+                                    const Color.fromRGBO(1, 101, 65, 1),
+                                padding: EdgeInsets.zero,
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: const Text(
+                                ' Daftar',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Version & Copyright Footer
+                      const SizedBox(height: 16),
+                      Center(
+                        child: Column(
+                          children: [
+                            Text(
+                              'v$_appVersion',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[400],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Powered by HABA',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[400],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
                 ),
               ),
             ),

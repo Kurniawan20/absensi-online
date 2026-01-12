@@ -30,6 +30,8 @@ import '../services/attendance_service.dart';
 import '../services/security_service.dart';
 import '../services/attendance_reminder_service.dart';
 import '../utils/storage_config.dart';
+import '../constants/office_location_config.dart';
+import '../constants/attendance_response_codes.dart';
 
 void main() => runApp(const Presence());
 
@@ -63,7 +65,10 @@ class _PresenceState extends State<Presence> {
   bool isOnExternalStorage = false;
   bool isSafeDevice = false;
   bool isDevelopmentModeEnable = false;
-  LatLng currentLatLng = LatLng(5.543605637891148, 95.32992029020498);
+  LatLng currentLatLng = LatLng(
+    OfficeLocationConfig.defaultLatitude,
+    OfficeLocationConfig.defaultLongitude,
+  );
 
   String? _selectedOption;
   bool _isSwipeEnabled = false;
@@ -75,6 +80,8 @@ class _PresenceState extends State<Presence> {
   String? _jamMasuk;
   String? _jamPulang;
 
+  static const bool _securityValidationEnabled = true;
+
   final _attendanceService = AttendanceService();
   final _securityService = SecurityService();
   final _reminderService = AttendanceReminderService();
@@ -83,14 +90,17 @@ class _PresenceState extends State<Presence> {
     super.initState();
     initializeDateFormatting('id', null);
 
-    _timer = Timer.periodic(Duration(minutes: 1), (timer) => _updateTime());
+    _timer = Timer.periodic(Duration(seconds: 1), (timer) => _updateTime());
     initializePreference().then((result) {
       if (!mounted) return;
       setState(() {});
     });
-    
+
     // Initialize reminder service
     _reminderService.initialize();
+
+    // Schedule daily 17:00 checkout reminder (temporarily set to 11:10 for testing)
+    _reminderService.scheduleDailyCheckOutReminder(hour: 11, minute: 10);
 
     getUserCurrentLocation().then((currLocation) {
       if (!mounted) return;
@@ -101,10 +111,7 @@ class _PresenceState extends State<Presence> {
             if (!mounted) return;
             controller.animateCamera(
               CameraUpdate.newCameraPosition(
-                CameraPosition(
-                  target: currentLatLng,
-                  zoom: zoomVar,
-                ),
+                CameraPosition(target: currentLatLng, zoom: zoomVar),
               ),
             );
           });
@@ -125,14 +132,12 @@ class _PresenceState extends State<Presence> {
     radius = prefs.getDouble("radius")!;
 
     String? kodeKantor = prefs.getString("kode_kantor");
-    if (kodeKantor == "813") {
-      latKantor2 = 5.521261515723264;
-      longKantor2 = 95.3300600393016;
-      radius2 = radius;
-      useSecondLocation = true;
-    } else if (kodeKantor != null && kodeKantor.startsWith("8")) {
-      latKantor2 = 5.544926358826539;
-      longKantor2 = 95.31200258268379;
+    final secondaryLocation = OfficeLocationConfig.getSecondaryLocation(
+      kodeKantor,
+    );
+    if (secondaryLocation != null) {
+      latKantor2 = secondaryLocation.latitude;
+      longKantor2 = secondaryLocation.longitude;
       radius2 = radius;
       useSecondLocation = true;
     }
@@ -181,7 +186,8 @@ class _PresenceState extends State<Presence> {
         ),
       );
       return Future.error(
-          'Location permissions are permanently denied, we cannot request permissions.');
+        'Location permissions are permanently denied, we cannot request permissions.',
+      );
     }
 
     return await Geolocator.getCurrentPosition();
@@ -201,7 +207,8 @@ class _PresenceState extends State<Presence> {
           barrierDismissible: false,
           builder: (context) => SecurityAlert(
             title: 'Absensi Diblokir',
-            message: 'Absensi tidak dapat dilakukan karena perangkat tidak memenuhi persyaratan keamanan.',
+            message:
+                'Absensi tidak dapat dilakukan karena perangkat tidak memenuhi persyaratan keamanan.',
             violations: securityResult.violations,
             canDismiss: true,
           ),
@@ -222,6 +229,26 @@ class _PresenceState extends State<Presence> {
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
+
+      // Check for fake GPS / mock location
+      if (position.isMocked) {
+        Navigator.of(context, rootNavigator: true).pop(); // Close loading
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => SecurityAlert(
+            title: 'Absensi Diblokir',
+            message:
+                'Absensi tidak dapat dilakukan karena terdeteksi penggunaan lokasi palsu (Fake GPS).',
+            violations: [
+              'Fake GPS / Mock Location terdeteksi',
+              'Lokasi tidak berasal dari GPS asli perangkat',
+            ],
+            canDismiss: true,
+          ),
+        );
+        return;
+      }
 
       double distanceInMeters = Geolocator.distanceBetween(
         position.latitude,
@@ -244,26 +271,18 @@ class _PresenceState extends State<Presence> {
         _absen(position.latitude, position.longitude, type);
       } else {
         Navigator.of(context, rootNavigator: true).pop();
-        showDialog(
-          context: context,
-          builder: (context) => CustomAlert(
-            title: 'Lokasi Invalid',
-            message: 'Anda berada di luar area kantor',
-            icon: Icons.location_off,
-            iconColor: Colors.red,
-          ),
+        _showErrorBottomSheet(
+          context,
+          'Lokasi Invalid',
+          'Anda berada di luar area kantor',
         );
       }
     } catch (e) {
       Navigator.of(context, rootNavigator: true).pop();
-      showDialog(
-        context: context,
-        builder: (context) => CustomAlert(
-          title: 'Gagal',
-          message: 'Terjadi kesalahan. Silahkan coba lagi.',
-          icon: Icons.error_outline,
-          iconColor: Colors.red,
-        ),
+      _showErrorBottomSheet(
+        context,
+        'Gagal',
+        'Terjadi kesalahan. Silahkan coba lagi.',
       );
     }
   }
@@ -272,45 +291,343 @@ class _PresenceState extends State<Presence> {
     // Removed duplicate loading dialog since it's now shown in _checkRadius
   }
 
-  void _fetchDialog(BuildContext context, String message,
-      [bool mounted = true]) async {
-    showDialog(
+  void _fetchDialog(
+    BuildContext context,
+    String message, [
+    bool mounted = true,
+  ]) async {
+    _showSuccessBottomSheet(context, message);
+  }
+
+  void _fetchDialogWarning(
+    BuildContext context,
+    String message, [
+    bool mounted = true,
+  ]) async {
+    _showErrorBottomSheet(context, 'Peringatan', message);
+  }
+
+  void _showSuccessBottomSheet(BuildContext context, String message) {
+    showModalBottomSheet(
       context: context,
-      builder: (context) => CustomAlert(
-        title: 'Berhasil',
-        message: message,
-        icon: Icons.check_circle_outline,
-        iconColor: Color.fromRGBO(1, 101, 65, 1),
+      backgroundColor: Colors.transparent,
+      isDismissible: true,
+      builder: (context) {
+        Future.delayed(const Duration(seconds: 2), () {
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+        });
+
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+              TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0.0, end: 1.0),
+                duration: const Duration(milliseconds: 800),
+                curve: Curves.elasticOut,
+                builder: (context, value, child) {
+                  return Transform.scale(scale: value, child: child);
+                },
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: const Color.fromRGBO(1, 101, 65, 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check_circle_rounded,
+                    color: Color.fromRGBO(1, 101, 65, 1),
+                    size: 48,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Berhasil',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Poppins',
+                  color: Color.fromRGBO(1, 101, 65, 1),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  fontFamily: 'Poppins',
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color.fromRGBO(1, 101, 65, 1),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showErrorBottomSheet(
+    BuildContext context,
+    String title,
+    String message, {
+    IconData? icon,
+    Color? color,
+  }) {
+    final effectiveColor = color ?? Colors.red.shade600;
+    final effectiveIcon = icon ?? Icons.warning_amber_rounded;
+    final backgroundColor = color?.withOpacity(0.1) ?? Colors.red.shade50;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isDismissible: true,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+            TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 0.0, end: 1.0),
+              duration: const Duration(milliseconds: 800),
+              curve: Curves.elasticOut,
+              builder: (context, value, child) {
+                return Transform.scale(scale: value, child: child);
+              },
+              child: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: backgroundColor,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(effectiveIcon, color: effectiveColor, size: 48),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Poppins',
+                color: effectiveColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+                fontFamily: 'Poppins',
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: effectiveColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'Mengerti',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }
 
-  void _fetchDialogWarning(BuildContext context, String message,
-      [bool mounted = true]) async {
-    showDialog(
+  void _konfirmasiAbsenPulang(
+    BuildContext context,
+    String message, [
+    bool mounted = true,
+  ]) async {
+    showModalBottomSheet(
       context: context,
-      builder: (context) => CustomAlert(
-        title: 'Peringatan',
-        message: message,
-        icon: Icons.warning_amber_rounded,
-        iconColor: Colors.red,
-      ),
-    );
-  }
-
-  void _konfirmasiAbsenPulang(BuildContext context, String message,
-      [bool mounted = true]) async {
-    showDialog(
-      context: context,
-      builder: (context) => CustomConfirmAlert(
-        title: 'Konfirmasi',
-        message: 'Apakah anda yakin akan melakukan absen pulang?',
-        onConfirm: () {
-          Navigator.pop(context); // Close confirmation dialog
-          _fetchDialog(
-              context, 'Sedang memproses absen pulang...'); // Show loading
-          _checkRadius('absenpulang');
-        },
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag handle
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+            // Icon
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: const Color.fromRGBO(1, 101, 65, 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                FluentIcons.sign_out_24_regular,
+                color: Color.fromRGBO(1, 101, 65, 1),
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 20),
+            // Title
+            const Text(
+              'Konfirmasi Absen Pulang',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Poppins',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Apakah Anda yakin akan melakukan absen pulang?',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+                fontFamily: 'Poppins',
+              ),
+            ),
+            const SizedBox(height: 24),
+            // Action buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey[600],
+                      side: BorderSide(color: Colors.grey[300]!),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Batal',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context); // Close confirmation
+                      _fetchDialog(context, 'Sedang memproses absen pulang...');
+                      _checkRadius('absenpulang');
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color.fromRGBO(1, 101, 65, 1),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      'Ya, Absen Pulang',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }
@@ -341,14 +658,10 @@ class _PresenceState extends State<Presence> {
         print('All stored items: $allItems');
 
         Navigator.of(context, rootNavigator: true).pop(context);
-        showDialog(
-          context: context,
-          builder: (context) => CustomAlert(
-            title: "Session Expired",
-            message: "Sesi anda telah berakhir. Silakan login kembali.",
-            icon: Icons.warning_amber_rounded,
-            iconColor: Colors.red,
-          ),
+        _showErrorBottomSheet(
+          context,
+          'Session Expired',
+          'Sesi anda telah berakhir. Silakan login kembali.',
         );
 
         // Redirect to login
@@ -366,19 +679,22 @@ class _PresenceState extends State<Presence> {
       print('\n=== Making check session request ===');
       print('URL: ${ApiConstants.BASE_URL}/checksession');
       print(
-          'Headers: Authorization: Bearer ${token.substring(0, min(10, token.length))}...');
+        'Headers: Authorization: Bearer ${token.substring(0, min(10, token.length))}...',
+      );
       print('Body: {"npp": "$nrk", "deviceId": "$_deviceId"}');
 
       final checkSessionResult = await http
-          .post(Uri.parse(ApiConstants.BASE_URL + "/checksession"),
-              headers: <String, String>{
-                'Content-Type': 'application/json; charset=UTF-8',
-                'Authorization': 'Bearer $token'
-              },
-              body: jsonEncode(<String, String>{
-                'npp': nrk.toString(),
-                "deviceId": _deviceId.toString(),
-              }))
+          .post(
+            Uri.parse(ApiConstants.BASE_URL + "/checksession"),
+            headers: <String, String>{
+              'Content-Type': 'application/json; charset=UTF-8',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode(<String, String>{
+              'npp': nrk.toString(),
+              "deviceId": _deviceId.toString(),
+            }),
+          )
           .timeout(const Duration(seconds: 20));
 
       print('Check session response status: ${checkSessionResult.statusCode}');
@@ -386,12 +702,14 @@ class _PresenceState extends State<Presence> {
 
       if (checkSessionResult.statusCode != 200) {
         print(
-            'Check session failed with status: ${checkSessionResult.statusCode}');
+          'Check session failed with status: ${checkSessionResult.statusCode}',
+        );
         throw Exception('Check session failed');
       }
 
-      final checkSessionData =
-          jsonDecode(checkSessionResult.body.toString().replaceAll('""', ""));
+      final checkSessionData = jsonDecode(
+        checkSessionResult.body.toString().replaceAll('""', ""),
+      );
 
       if (checkSessionData['rcode'] == "00") {
         // Verify token is still valid after check session
@@ -404,7 +722,8 @@ class _PresenceState extends State<Presence> {
             print('\n=== Making attendance request ===');
             print('URL: ${ApiConstants.BASE_URL}/$absenType');
             print(
-                'Headers: Authorization: Bearer ${token.substring(0, min(10, token.length))}...');
+              'Headers: Authorization: Bearer ${token.substring(0, min(10, token.length))}...',
+            );
             print('Body: {');
             print('  "npp": "$nrk",');
             print('  "latitude": "$lat",');
@@ -413,31 +732,50 @@ class _PresenceState extends State<Presence> {
             print('}');
 
             final getResult = await http
-                .post(Uri.parse(ApiConstants.BASE_URL + "/" + absenType),
-                    headers: <String, String>{
-                      'Content-Type': 'application/json; charset=UTF-8',
-                      'Authorization': 'Bearer $token'
-                    },
-                    body: jsonEncode(<String, String>{
-                      'npp': nrk.toString(),
-                      'latitude': lat.toString(),
-                      'longitude': long.toString(),
-                      'branch_id': branch_id
-                    }))
+                .post(
+                  Uri.parse(ApiConstants.BASE_URL + "/" + absenType),
+                  headers: <String, String>{
+                    'Content-Type': 'application/json; charset=UTF-8',
+                    'Authorization': 'Bearer $token',
+                  },
+                  body: jsonEncode(<String, String>{
+                    'npp': nrk.toString(),
+                    'latitude': lat.toString(),
+                    'longitude': long.toString(),
+                    'branch_id': branch_id,
+                  }),
+                )
                 .timeout(const Duration(seconds: 20));
 
             print('Attendance response status: ${getResult.statusCode}');
             print('Attendance response body: ${getResult.body}');
 
             String result = getResult.body.toString().replaceAll('""', "");
+            final responseData = jsonDecode(result);
+            final String rcode = responseData['rcode'] ?? '';
+            final String? apiMessage = responseData['message'];
 
-            if (jsonDecode(result)['rcode'] == "00") {
+            // Get response based on type (check-in or check-out)
+            // For success (rcode == '00'), use our custom messages instead of API messages
+            final AttendanceResponse response = absenType == 'absenmasuk'
+                ? AttendanceResponseCodes.getCheckInResponse(
+                    rcode,
+                    rcode == '00' ? null : apiMessage,
+                  )
+                : AttendanceResponseCodes.getCheckOutResponse(
+                    rcode,
+                    rcode == '00' ? null : apiMessage,
+                  );
+
+            if (response.isSuccess) {
               // Update attendance time immediately after successful check-in/out
               final now = DateTime.now();
               final currentTime =
                   "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
               await _attendanceService.updateAttendanceTime(
-                  absenType, currentTime);
+                absenType,
+                currentTime,
+              );
 
               // Update local state
               setState(() {
@@ -448,36 +786,40 @@ class _PresenceState extends State<Presence> {
                 }
               });
 
-              // Handle reminder notifications
-              if (absenType == 'absenmasuk') {
-                // Schedule check-out reminder after successful check-in
-                await _reminderService.scheduleCheckOutReminder(
-                  checkInTime: now,
-                  workHours: 8, // 8 jam kerja
+              // Handle reminder notifications (wrapped in try-catch to not break success flow)
+              try {
+                if (absenType == 'absenmasuk') {
+                  // Schedule check-out reminder after successful check-in
+                  await _reminderService.scheduleCheckOutReminder(
+                    checkInTime: now,
+                    workHours: 8, // 8 jam kerja
+                  );
+                  print('✅ Check-out reminder scheduled');
+                } else if (absenType == 'absenpulang') {
+                  // Cancel reminders after successful check-out
+                  await _reminderService.cancelCheckOutReminders();
+                  print('✅ Check-out reminders cancelled');
+                }
+              } catch (reminderError) {
+                // Log but don't fail the attendance flow
+                print(
+                  '⚠️ Reminder scheduling failed (non-critical): $reminderError',
                 );
-                print('✅ Check-out reminder scheduled');
-              } else if (absenType == 'absenpulang') {
-                // Cancel reminders after successful check-out
-                await _reminderService.cancelCheckOutReminders();
-                print('✅ Check-out reminders cancelled');
               }
 
               // Close loading modal first
               Navigator.of(context, rootNavigator: true).pop(context);
 
-              // Show different dialog based on late status
-              showDialog(
-                context: context,
-                builder: (context) => CustomAlert(
-                  title: absenType == 'absenmasuk'
-                      ? (_isLate() ? "Terlambat" : "Berhasil")
-                      : "Berhasil",
-                  message: absenType == 'absenmasuk'
-                      ? _getCheckInMessage()
-                      : "Absensi pulang berhasil. Selamat beristirahat!",
-                  icon: Icons.check_circle_outline,
-                  iconColor: Color.fromRGBO(1, 101, 65, 1),
-                ),
+              // Show success bottom sheet with late status for check-in
+              final successTitle = absenType == 'absenmasuk' && _isLate()
+                  ? 'Terlambat'
+                  : response.title;
+              final successMessage = absenType == 'absenmasuk'
+                  ? _getCheckInMessage()
+                  : response.message;
+              _showSuccessBottomSheet(
+                context,
+                '$successTitle\n$successMessage',
               );
 
               // Trigger attendance update notification
@@ -488,16 +830,33 @@ class _PresenceState extends State<Presence> {
 
               return "absen berhasil";
             } else {
-              String message = jsonDecode(result)['message'];
+              // Handle error responses
               Navigator.of(context, rootNavigator: true).pop(context);
-              showDialog(
-                context: context,
-                builder: (context) => CustomAlert(
-                  title: "Warning",
-                  message: message,
-                  icon: Icons.warning_amber_rounded,
-                  iconColor: Colors.red,
-                ),
+
+              IconData errorIcon;
+              Color errorColor;
+
+              switch (response.icon) {
+                case AttendanceIcon.tooEarly:
+                  errorIcon = Icons.access_time_rounded;
+                  errorColor = Colors.orange;
+                  break;
+                case AttendanceIcon.duplicate:
+                case AttendanceIcon.warning:
+                  errorIcon = Icons.warning_amber_rounded;
+                  errorColor = Colors.orange;
+                  break;
+                default:
+                  errorIcon = Icons.error_outline;
+                  errorColor = Colors.red;
+              }
+
+              _showErrorBottomSheet(
+                context,
+                response.title,
+                response.message,
+                icon: errorIcon,
+                color: errorColor,
               );
               return "absen gagal";
             }
@@ -505,104 +864,102 @@ class _PresenceState extends State<Presence> {
             print('\n=== Attendance request timeout ===');
             print('Error: $e');
             Navigator.of(context, rootNavigator: true).pop(context);
-            showDialog(
-              context: context,
-              builder: (context) => CustomAlert(
-                title: "Warning",
-                message: "Koneksi timeout, silahkan coba lagi!",
-                icon: Icons.warning_amber_rounded,
-                iconColor: Colors.red,
-              ),
+            _showErrorBottomSheet(
+              context,
+              'Timeout',
+              'Koneksi timeout, silahkan coba lagi!',
             );
             return "absen gagal";
           } catch (e) {
             print('\n=== Attendance request error ===');
             print('Error: $e');
             Navigator.of(context, rootNavigator: true).pop(context);
-            showDialog(
-              context: context,
-              builder: (context) => CustomAlert(
-                title: "Warning",
-                message: "Terjadi kesalahan, silahkan coba lagi!",
-                icon: Icons.warning_amber_rounded,
-                iconColor: Colors.red,
-              ),
+            _showErrorBottomSheet(
+              context,
+              'Error',
+              'Terjadi kesalahan, silahkan coba lagi!',
             );
             return "absen gagal";
           }
         } else {
           Navigator.of(context, rootNavigator: true).pop(context);
-          showDialog(
-            context: context,
-            builder: (context) => CustomAlert(
-              title: "Warning",
-              message: "Anda berada diluar radius kantor!",
-              icon: Icons.warning_amber_rounded,
-              iconColor: Colors.red,
-            ),
+          _showErrorBottomSheet(
+            context,
+            'Lokasi Invalid',
+            'Anda berada diluar radius kantor!',
           );
           return "absen gagal";
         }
       } else {
         String message = jsonDecode(
-            checkSessionResult.body.toString().replaceAll('""', ""))['message'];
+          checkSessionResult.body.toString().replaceAll('""', ""),
+        )['message'];
         Navigator.of(context, rootNavigator: true).pop(context);
-        showDialog(
-          context: context,
-          builder: (context) => CustomAlert(
-            title: "Warning",
-            message: message,
-            icon: Icons.warning_amber_rounded,
-            iconColor: Colors.red,
-          ),
-        );
+        _showErrorBottomSheet(context, 'Warning', message);
         return "absen gagal";
       }
     } on TimeoutException catch (e) {
       print('\n=== Check session timeout ===');
       print('Error: $e');
       Navigator.of(context, rootNavigator: true).pop(context);
-      showDialog(
-        context: context,
-        builder: (context) => CustomAlert(
-          title: "Warning",
-          message: "Koneksi timeout, silahkan coba lagi!",
-          icon: Icons.warning_amber_rounded,
-          iconColor: Colors.red,
-        ),
+      _showErrorBottomSheet(
+        context,
+        'Timeout',
+        'Koneksi timeout, silahkan coba lagi!',
       );
       return "absen gagal";
     } catch (e) {
       print('\n=== Check session error ===');
       print('Error: $e');
       Navigator.of(context, rootNavigator: true).pop(context);
-      showDialog(
-        context: context,
-        builder: (context) => CustomAlert(
-          title: "Warning",
-          message: "Terjadi kesalahan, silahkan coba lagi!",
-          icon: Icons.warning_amber_rounded,
-          iconColor: Colors.red,
-        ),
+      _showErrorBottomSheet(
+        context,
+        'Error',
+        'Terjadi kesalahan, silahkan coba lagi!',
       );
       return "absen gagal";
     }
   }
 
+  bool _isWeekend() {
+    final weekday = DateTime.now().weekday;
+    return weekday == DateTime.saturday || weekday == DateTime.sunday;
+  }
+
   bool _isLate() {
+    // Weekend exception: Don't count as late if it's weekend
+    if (_isWeekend()) {
+      return false; // Weekend attendance is always considered on time
+    }
+
     // Define the standard start time
-    final standardStartTime = DateTime(DateTime.now().year,
-        DateTime.now().month, DateTime.now().day, 7, 45, 0 // 07:45 AM
-        );
+    final standardStartTime = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+      7,
+      45,
+      0, // 07:45 AM
+    );
 
     final now = DateTime.now();
-    final currentTime =
-        DateTime(now.year, now.month, now.day, now.hour, now.minute);
+    final currentTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      now.hour,
+      now.minute,
+    );
 
     return currentTime.isAfter(standardStartTime);
   }
 
   String _getCheckInMessage() {
+    // Weekend exception: Different message for weekend attendance
+    if (_isWeekend()) {
+      return 'Absensi weekend berhasil dicatat. Terima kasih atas kerja keras Anda!';
+    }
+
     if (_isLate()) {
       return 'Anda terlambat melakukan absensi. Harap segera melakukan absensi dan memberikan keterangan keterlambatan.';
     } else {
@@ -635,20 +992,27 @@ class _PresenceState extends State<Presence> {
   }
 
   Future<void> _performSecurityCheck() async {
+    // Skip security check if validation is disabled
+    if (!_securityValidationEnabled) {
+      print('Security validation is disabled');
+      return;
+    }
+
     try {
       print('Performing security check...');
       final securityResult = await _securityService.performSecurityCheck();
-      
+
       if (!securityResult.isSecure) {
         print('Security violations detected: ${securityResult.violations}');
-        
+
         if (mounted) {
           showDialog(
             context: context,
             barrierDismissible: false,
             builder: (context) => SecurityAlert(
               title: 'Peringatan Keamanan',
-              message: 'Aplikasi tidak dapat digunakan karena perangkat tidak memenuhi persyaratan keamanan.',
+              message:
+                  'Aplikasi tidak dapat digunakan karena perangkat tidak memenuhi persyaratan keamanan.',
               violations: securityResult.violations,
               onPressed: () {
                 Navigator.of(context).pop();
@@ -672,7 +1036,8 @@ class _PresenceState extends State<Presence> {
           context: context,
           builder: (context) => CustomAlert(
             title: 'Peringatan',
-            message: 'Tidak dapat memverifikasi keamanan perangkat. Pastikan perangkat Anda memenuhi persyaratan keamanan.',
+            message:
+                'Tidak dapat memverifikasi keamanan perangkat. Pastikan perangkat Anda memenuhi persyaratan keamanan.',
             icon: Icons.warning,
             iconColor: Colors.orange,
           ),
@@ -687,7 +1052,9 @@ class _PresenceState extends State<Presence> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (context) => Login()));
+        context,
+        MaterialPageRoute(builder: (context) => Login()),
+      );
     });
   }
 
@@ -718,10 +1085,7 @@ class _PresenceState extends State<Presence> {
 
       controller.animateCamera(
         CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: latLng,
-            zoom: 17.0,
-          ),
+          CameraPosition(target: latLng, zoom: 17.0),
         ),
       );
 
@@ -733,7 +1097,8 @@ class _PresenceState extends State<Presence> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              'Could not get current location. Please check your location permissions.'),
+            'Could not get current location. Please check your location permissions.',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -747,10 +1112,7 @@ class _PresenceState extends State<Presence> {
 
       controller.animateCamera(
         CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: latLng,
-            zoom: 17.0,
-          ),
+          CameraPosition(target: latLng, zoom: 17.0),
         ),
       );
 
@@ -830,8 +1192,8 @@ class _PresenceState extends State<Presence> {
                       circleId: CircleId("primary"),
                       center: LatLng(latKantor, longKantor),
                       radius: radius,
-                      fillColor: Colors.blue.withOpacity(0.2),
-                      strokeColor: Colors.blue.withOpacity(0.4),
+                      fillColor: Color.fromRGBO(1, 101, 65, 0.2),
+                      strokeColor: Color.fromRGBO(1, 101, 65, 0.5),
                       strokeWidth: 2,
                     ),
                     if (useSecondLocation)
@@ -839,9 +1201,34 @@ class _PresenceState extends State<Presence> {
                         circleId: CircleId("secondary"),
                         center: LatLng(latKantor2, longKantor2),
                         radius: radius2,
-                        fillColor: Colors.blue.withOpacity(0.2),
-                        strokeColor: Colors.blue.withOpacity(0.4),
+                        fillColor: Colors.green.withOpacity(0.2),
+                        strokeColor: Colors.green.withOpacity(0.4),
                         strokeWidth: 2,
+                      ),
+                  ]),
+                  markers: Set.from([
+                    Marker(
+                      markerId: MarkerId("primary_office"),
+                      position: LatLng(latKantor, longKantor),
+                      infoWindow: InfoWindow(
+                        title: 'Kantor Utama',
+                        snippet: 'Radius: ${radius.toStringAsFixed(0)}m',
+                      ),
+                      icon: BitmapDescriptor.defaultMarkerWithHue(
+                        120.0, // Green hue
+                      ),
+                    ),
+                    if (useSecondLocation)
+                      Marker(
+                        markerId: MarkerId("secondary_office"),
+                        position: LatLng(latKantor2, longKantor2),
+                        infoWindow: InfoWindow(
+                          title: 'Kantor Alternatif',
+                          snippet: 'Radius: ${radius2.toStringAsFixed(0)}m',
+                        ),
+                        icon: BitmapDescriptor.defaultMarkerWithHue(
+                          BitmapDescriptor.hueGreen,
+                        ),
                       ),
                   ]),
                 ),
@@ -856,54 +1243,81 @@ class _PresenceState extends State<Presence> {
                       if (!snapshot.hasData) return SizedBox();
 
                       final userPosition = snapshot.data!;
-                      final distance = Geolocator.distanceBetween(
+
+                      // Calculate distance to primary office
+                      final distanceToPrimary = Geolocator.distanceBetween(
                         userPosition.latitude,
                         userPosition.longitude,
                         latKantor,
                         longKantor,
                       );
 
-                      final bool isOutsideRadius = distance > radius;
+                      // Calculate distance to secondary office (if exists)
+                      double minDistance = distanceToPrimary;
+                      if (useSecondLocation) {
+                        final distanceToSecondary = Geolocator.distanceBetween(
+                          userPosition.latitude,
+                          userPosition.longitude,
+                          latKantor2,
+                          longKantor2,
+                        );
+                        minDistance = min(
+                          distanceToPrimary,
+                          distanceToSecondary,
+                        );
+                      }
 
-                      return Container(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: isOutsideRadius
-                              ? Colors.red[400]
-                              : Colors.green[400],
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 8,
-                              offset: Offset(0, 2),
+                      // Check if user is within any office radius
+                      final bool isOutsideRadius = minDistance > radius;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Location status badge
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
                             ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              isOutsideRadius
-                                  ? Icons.warning_rounded
-                                  : Icons.check_circle_rounded,
-                              color: Colors.white,
-                              size: 16,
+                            decoration: BoxDecoration(
+                              color: isOutsideRadius
+                                  ? Colors.red[400]
+                                  : Colors.green[400],
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 8,
+                                  offset: Offset(0, 2),
+                                ),
+                              ],
                             ),
-                            SizedBox(width: 4),
-                            Text(
-                              isOutsideRadius
-                                  ? 'Di Luar Area Kantor'
-                                  : 'Di Dalam Area Kantor',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  isOutsideRadius
+                                      ? Icons.warning_rounded
+                                      : Icons.check_circle_rounded,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  isOutsideRadius
+                                      ? 'Di Luar Area Kantor'
+                                      : 'Di Dalam Area Kantor',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ), // End Location status badge Container
+                        ],
                       );
                     },
                   ),
@@ -993,13 +1407,16 @@ class _PresenceState extends State<Presence> {
                         // Date and Time Display
                         Padding(
                           padding: EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 16),
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                DateFormat('dd MMMM yyyy')
-                                    .format(DateTime.now()),
+                                DateFormat(
+                                  'dd MMMM yyyy',
+                                ).format(DateTime.now()),
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
@@ -1034,8 +1451,7 @@ class _PresenceState extends State<Presence> {
                                         color: _jamMasuk != '--:--'
                                             ? Color.fromRGBO(1, 101, 65, 0.1)
                                             : Colors.red[100],
-                                        borderRadius:
-                                            BorderRadius.circular(10),
+                                        borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: Center(
                                         child: Icon(
@@ -1128,8 +1544,7 @@ class _PresenceState extends State<Presence> {
                                         color: _jamPulang != '--:--'
                                             ? Color.fromRGBO(1, 101, 65, 0.1)
                                             : Colors.red[100],
-                                        borderRadius:
-                                            BorderRadius.circular(10),
+                                        borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: Center(
                                         child: Icon(
@@ -1229,9 +1644,9 @@ class _PresenceState extends State<Presence> {
                               borderRadius: BorderRadius.circular(32),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Theme.of(context)
-                                      .primaryColor
-                                      .withOpacity(0.15),
+                                  color: Theme.of(
+                                    context,
+                                  ).primaryColor.withOpacity(0.15),
                                   blurRadius: 8,
                                   offset: Offset(0, 4),
                                   spreadRadius: -2,
@@ -1239,178 +1654,169 @@ class _PresenceState extends State<Presence> {
                               ],
                             ),
                             child: Stack(
+                              alignment: Alignment.centerLeft,
                               children: [
-                                // Main swipe button
+                                // Background Track
                                 Container(
-                                  height: 56,
-                                  width: double.infinity,
+                                  height: 60,
                                   decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.centerLeft,
-                                      end: Alignment.centerRight,
-                                      colors: [
-                                        Theme.of(context).primaryColor,
-                                        Theme.of(context)
-                                            .primaryColor
-                                            .withOpacity(0.8),
-                                      ],
+                                    borderRadius: BorderRadius.circular(35),
+                                    color: Colors.white,
+                                    border: Border.all(
+                                      color: Theme.of(
+                                        context,
+                                      ).primaryColor.withOpacity(0.1),
+                                      width: 1,
                                     ),
-                                    borderRadius: BorderRadius.circular(32),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      SizedBox(width: 60),
-                                      Expanded(
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Flexible(
-                                              child: Text(
-                                                _selectedOption == 'Absen Masuk' 
-                                                    ? 'Geser untuk Absen Masuk'
-                                                    : 'Geser untuk Absen Pulang',
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                            SizedBox(width: 4),
-                                            Icon(
-                                              Icons.waving_hand_rounded,
-                                              color: Colors.yellow,
-                                              size: 16,
-                                            ),
-                                          ],
-                                        ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.03),
+                                        blurRadius: 4,
+                                        offset: Offset(0, 2),
                                       ),
-                                      SizedBox(width: 60),
                                     ],
                                   ),
+                                  child: Center(
+                                    child: TweenAnimationBuilder<double>(
+                                      tween: Tween(begin: 0.0, end: 1.0),
+                                      duration: const Duration(seconds: 2),
+                                      builder: (context, value, child) {
+                                        return ShaderMask(
+                                          shaderCallback: (rect) {
+                                            return LinearGradient(
+                                              begin: Alignment.centerLeft,
+                                              end: Alignment.centerRight,
+                                              colors: [
+                                                Theme.of(
+                                                  context,
+                                                ).primaryColor.withOpacity(0.5),
+                                                Theme.of(context).primaryColor,
+                                                Theme.of(
+                                                  context,
+                                                ).primaryColor.withOpacity(0.5),
+                                              ],
+                                              stops: [
+                                                value - 0.2,
+                                                value,
+                                                value + 0.2,
+                                              ],
+                                            ).createShader(rect);
+                                          },
+                                          child: Text(
+                                            _selectedOption == 'Absen Masuk'
+                                                ? 'Geser ke kanan >>>'
+                                                : 'Geser ke kanan >>>',
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w600,
+                                              color: Theme.of(
+                                                context,
+                                              ).primaryColor,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      onEnd: () {
+                                        if (mounted) setState(() {});
+                                      },
+                                    ),
+                                  ),
                                 ),
-                                // Sliding arrow button
+
+                                // Active Fill
+                                Container(
+                                  height: 60,
+                                  width: 60.0 + _slideValue,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(35),
+                                    color: Theme.of(
+                                      context,
+                                    ).primaryColor.withOpacity(0.15),
+                                  ),
+                                ),
+
+                                // Slider Knob
                                 if (_isSwipeEnabled)
                                   AnimatedPositioned(
                                     duration: Duration(
-                                        milliseconds: _isSliding ? 0 : 200),
-                                    curve: Curves.easeOutBack,
-                                    left: 8 + _slideValue,
-                                    top: 4,
+                                      milliseconds: _isSliding ? 0 : 300,
+                                    ),
+                                    curve: Curves.elasticOut,
+                                    left: _slideValue,
                                     child: GestureDetector(
-                                      onHorizontalDragStart: (details) {
-                                        setState(() {
-                                          _isSliding = true;
-                                        });
-                                      },
                                       onHorizontalDragUpdate: (details) {
                                         setState(() {
+                                          _isSliding = true;
+                                          final maxWidth = MediaQuery.of(
+                                                context,
+                                              ).size.width -
+                                              24 -
+                                              60;
                                           _slideValue =
                                               (_slideValue + details.delta.dx)
-                                                  .clamp(
-                                                      0,
-                                                      MediaQuery.of(context)
-                                                              .size
-                                                              .width -
-                                                          180);
+                                                  .clamp(0.0, maxWidth);
                                         });
                                       },
                                       onHorizontalDragEnd: (details) {
-                                        if (_slideValue >
+                                        final maxWidth =
                                             MediaQuery.of(context).size.width -
-                                                220) {
+                                                24 -
+                                                60;
+                                        final threshold = maxWidth * 0.7;
+
+                                        if (_slideValue > threshold) {
                                           _checkRadius(
-                                              _selectedOption == 'Absen Masuk'
-                                                  ? 'absenmasuk'
-                                                  : 'absenpulang');
+                                            _selectedOption == 'Absen Masuk'
+                                                ? 'absenmasuk'
+                                                : 'absenpulang',
+                                          );
                                           _fetchData(context);
                                         }
+
                                         setState(() {
                                           _isSliding = false;
                                           _slideValue = 0;
                                         });
                                       },
-                                      child: TweenAnimationBuilder(
-                                        duration: Duration(milliseconds: 150),
-                                        tween: Tween<double>(
-                                          begin: 0,
-                                          end: _slideValue /
-                                              (MediaQuery.of(context)
-                                                      .size
-                                                      .width -
-                                                  180),
-                                        ),
-                                        builder:
-                                            (context, double value, child) {
-                                          return Transform.scale(
-                                            scale: 1 + (value * 0.1),
-                                            child: Transform.rotate(
-                                              angle: value * 0.5,
-                                              child: Container(
-                                                width: 48,
-                                                height: 48,
-                                                decoration: BoxDecoration(
-                                                  color: Colors.white,
-                                                  shape: BoxShape.circle,
-                                                  boxShadow: [
-                                                    BoxShadow(
-                                                      color: Colors.black
-                                                          .withOpacity(0.1),
-                                                      blurRadius: 8,
-                                                      offset: Offset(0, 2),
-                                                      spreadRadius: -2,
-                                                    ),
-                                                  ],
-                                                ),
-                                                child: Center(
-                                                  child: Icon(
-                                                    Icons.chevron_right_rounded,
-                                                    color: Theme.of(context)
-                                                        .primaryColor,
-                                                    size: 28,
-                                                  ),
-                                                ),
-                                              ),
+                                      child: Container(
+                                        height: 60,
+                                        width: 60,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Theme.of(context).primaryColor,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Theme.of(
+                                                context,
+                                              ).primaryColor.withOpacity(0.3),
+                                              blurRadius: 8,
+                                              offset: Offset(2, 2),
+                                              spreadRadius: 1,
                                             ),
-                                          );
-                                        },
+                                          ],
+                                        ),
+                                        child: Icon(
+                                          Icons.chevron_right_rounded,
+                                          color: Colors.white,
+                                          size: 32,
+                                        ),
                                       ),
                                     ),
                                   )
                                 else
                                   Positioned(
-                                    left: 8,
-                                    top: 4,
+                                    left: 0,
                                     child: Container(
-                                      width: 48,
-                                      height: 48,
+                                      height: 60,
+                                      width: 60,
                                       decoration: BoxDecoration(
-                                        color: Colors.white,
                                         shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color:
-                                                Colors.black.withOpacity(0.1),
-                                            blurRadius: 8,
-                                            offset: Offset(0, 2),
-                                            spreadRadius: -2,
-                                          ),
-                                        ],
+                                        color: Colors.grey[200],
                                       ),
-                                      padding: EdgeInsets.all(2),
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey[400],
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(
-                                          Icons.info_outline,
-                                          color: Colors.white,
-                                          size: 24,
-                                        ),
+                                      child: Icon(
+                                        Icons.lock,
+                                        color: Colors.grey,
                                       ),
                                     ),
                                   ),
@@ -1496,7 +1902,11 @@ class _PresenceState extends State<Presence> {
   }
 
   Widget _buildAttendanceOption(
-      String title, Color color, VoidCallback onTap, bool isSelected) {
+    String title,
+    Color color,
+    VoidCallback onTap,
+    bool isSelected,
+  ) {
     return SizedBox(
       width: double.infinity,
       child: InkWell(
@@ -1505,7 +1915,7 @@ class _PresenceState extends State<Presence> {
           padding: EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
             border: Border.all(color: color, width: 1.5),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             color: isSelected ? color : Colors.transparent,
           ),
           child: Center(

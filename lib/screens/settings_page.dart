@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../services/secure_storage_service.dart';
+import 'terms_and_conditions_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({Key? key}) : super(key: key);
@@ -14,7 +16,8 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   bool _notificationsEnabled = true;
   bool _biometricEnabled = false;
-  String _selectedLanguage = 'Bahasa Indonesia';
+
+  String _appVersion = '1.0.0'; // Default fallback
   final _secureStorage = SecureStorageService();
 
   @override
@@ -26,7 +29,20 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _loadSettings() async {
     print('Loading settings...');
     final prefs = await SharedPreferences.getInstance();
+
     final biometricEnabled = await _secureStorage.isBiometricEnabled();
+
+    // Get app version
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _appVersion = packageInfo.version;
+        });
+      }
+    } catch (e) {
+      print('Error getting app version: $e');
+    }
 
     print('Loaded biometric enabled: $biometricEnabled');
 
@@ -34,7 +50,6 @@ class _SettingsPageState extends State<SettingsPage> {
       setState(() {
         _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
         _biometricEnabled = biometricEnabled;
-        _selectedLanguage = prefs.getString('language') ?? 'Bahasa Indonesia';
       });
     }
   }
@@ -43,7 +58,6 @@ class _SettingsPageState extends State<SettingsPage> {
     print('Saving settings...');
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('notifications_enabled', _notificationsEnabled);
-    await prefs.setString('language', _selectedLanguage);
 
     print('Setting biometric enabled to: $_biometricEnabled');
     await _secureStorage.setBiometricEnabled(_biometricEnabled);
@@ -58,6 +72,104 @@ class _SettingsPageState extends State<SettingsPage> {
     print('Toggling biometric to: $value');
 
     if (value) {
+      // Show confirmation dialog before enabling
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color.fromRGBO(1, 101, 65, 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    FluentIcons.fingerprint_24_regular,
+                    color: Color.fromRGBO(1, 101, 65, 1),
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Aktifkan Login Biometrik',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Dengan mengaktifkan fitur ini:',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildDialogBullet(
+                    'Anda dapat login menggunakan sidik jari atau pengenalan wajah.'),
+                _buildDialogBullet(
+                    'Kredensial Anda akan disimpan secara aman di perangkat ini.'),
+                _buildDialogBullet(
+                    'Anda dapat menonaktifkan fitur ini kapan saja.'),
+                const SizedBox(height: 16),
+                Text(
+                  'Apakah Anda yakin ingin mengaktifkan login biometrik?',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[700],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text(
+                  'Batal',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color.fromRGBO(1, 101, 65, 1),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  'Aktifkan',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirmed != true) {
+        return; // User cancelled
+      }
+
       // If enabling biometric, we need to save current credentials
       final prefs = await SharedPreferences.getInstance();
       final email = prefs.getString('email');
@@ -75,7 +187,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                  'Silakan login terlebih dahulu untuk mengaktifkan login sidik jari'),
+                  'Silakan login terlebih dahulu untuk mengaktifkan login biometrik'),
               backgroundColor: Colors.red,
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(
@@ -100,8 +212,8 @@ class _SettingsPageState extends State<SettingsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(value
-              ? 'Login sidik jari diaktifkan'
-              : 'Login sidik jari dinonaktifkan'),
+              ? 'Login biometrik diaktifkan'
+              : 'Login biometrik dinonaktifkan'),
           backgroundColor: const Color.fromRGBO(1, 101, 65, 1),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -111,6 +223,37 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       );
     }
+  }
+
+  Widget _buildDialogBullet(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 6),
+            width: 6,
+            height: 6,
+            decoration: const BoxDecoration(
+              color: Color.fromRGBO(1, 101, 65, 1),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey[700],
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -187,66 +330,6 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             const Divider(height: 1),
-            ListTile(
-              leading: const Icon(
-                FluentIcons.translate_24_regular,
-                color: Color.fromRGBO(1, 101, 65, 1),
-              ),
-              title: const Text(
-                'Bahasa',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              subtitle: Text(_selectedLanguage),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                // Show language selection dialog
-                showDialog(
-                  context: context,
-                  builder: (BuildContext context) {
-                    return AlertDialog(
-                      title: const Text('Pilih Bahasa'),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ListTile(
-                            title: const Text('Bahasa Indonesia'),
-                            leading: Radio<String>(
-                              value: 'Bahasa Indonesia',
-                              groupValue: _selectedLanguage,
-                              onChanged: (String? value) {
-                                setState(() {
-                                  _selectedLanguage = value!;
-                                });
-                                _saveSettings();
-                                Navigator.pop(context);
-                              },
-                            ),
-                          ),
-                          ListTile(
-                            title: const Text('English'),
-                            leading: Radio<String>(
-                              value: 'English',
-                              groupValue: _selectedLanguage,
-                              onChanged: (String? value) {
-                                setState(() {
-                                  _selectedLanguage = value!;
-                                });
-                                _saveSettings();
-                                Navigator.pop(context);
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-            const Divider(height: 1),
             const SizedBox(height: 24),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -271,25 +354,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              subtitle: const Text('1.0.0'),
-            ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(
-                FluentIcons.document_24_regular,
-                color: Color.fromRGBO(1, 101, 65, 1),
-              ),
-              title: const Text(
-                'Kebijakan Privasi',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                // Navigate to privacy policy
-              },
+              subtitle: Text(_appVersion),
             ),
             const Divider(height: 1),
             ListTile(
@@ -306,7 +371,12 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () {
-                // Navigate to terms and conditions
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const TermsAndConditionsPage(),
+                  ),
+                );
               },
             ),
           ],

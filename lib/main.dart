@@ -1,10 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'bloc/login/login_bloc.dart';
-import 'bloc/login/login_state.dart';
+
 import 'repository/login_repository.dart';
 import 'bloc/presence/presence_bloc.dart';
 import 'repository/presence_repository.dart';
@@ -15,7 +16,9 @@ import 'repository/attendance_recap_repository.dart';
 import 'bloc/notification/notification_bloc.dart';
 import 'bloc/notification/notification_event.dart';
 import 'repository/notification_repository.dart';
-import 'screens/page_login.dart';
+import 'bloc/leave/leave_bloc.dart';
+import 'repository/leave_repository.dart';
+
 import 'screens/page_splashscreen.dart';
 import 'firebase_options.dart';
 
@@ -39,6 +42,7 @@ void main() async {
   final homeRepository = HomeRepository();
   final attendanceRecapRepository = AttendanceRecapRepository();
   final notificationRepository = NotificationRepository(preferences: prefs);
+  final leaveRepository = LeaveRepository();
 
   runApp(
     MyApp(
@@ -47,6 +51,7 @@ void main() async {
       homeRepository: homeRepository,
       attendanceRecapRepository: attendanceRecapRepository,
       notificationRepository: notificationRepository,
+      leaveRepository: leaveRepository,
     ),
   );
 }
@@ -57,6 +62,7 @@ class MyApp extends StatelessWidget {
   final HomeRepository homeRepository;
   final AttendanceRecapRepository attendanceRecapRepository;
   final NotificationRepository notificationRepository;
+  final LeaveRepository leaveRepository;
 
   const MyApp({
     Key? key,
@@ -65,6 +71,7 @@ class MyApp extends StatelessWidget {
     required this.homeRepository,
     required this.attendanceRecapRepository,
     required this.notificationRepository,
+    required this.leaveRepository,
   }) : super(key: key);
 
   @override
@@ -94,10 +101,22 @@ class MyApp extends StatelessWidget {
             return bloc;
           },
         ),
+        BlocProvider(
+          create: (context) => LeaveBloc(leaveRepository: leaveRepository),
+        ),
       ],
       child: MaterialApp(
         title: 'Monitoring Project',
         debugShowCheckedModeBanner: false,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('id', 'ID'),
+          Locale('en', 'US'),
+        ],
         theme: ThemeData(
           primaryColor: const Color.fromRGBO(1, 101, 65, 1),
           colorScheme: ColorScheme.fromSeed(

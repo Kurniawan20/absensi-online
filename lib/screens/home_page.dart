@@ -19,6 +19,7 @@ import './attendance_recap_screen.dart';
 import '../services/attendance_service.dart';
 import '../utils/storage_config.dart';
 import '../services/avatar_service.dart';
+import './leave/leave_main_page.dart';
 
 extension StringCasingExtension on String {
   String toTitleCase() => this
@@ -459,8 +460,8 @@ class _HomeScreenState extends State<HomePage> {
                           .calendar_cancel_24_regular, // Calendar for time off
                       label: 'Izin',
                       color: const Color(0xFF1565C0), // Dark Blue
-                      onTap: () {},
-                      isDisabled: true,
+                      onTap: _onIzinTap,
+                      isDisabled: false,
                     ),
                     _buildQuickAction(
                       icon: FluentIcons
@@ -602,6 +603,21 @@ class _HomeScreenState extends State<HomePage> {
         ),
       );
     }
+  }
+
+  void _onIzinTap() {
+    HapticFeedback.lightImpact();
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return FadeTransition(
+            opacity: animation,
+            child: const LeaveMainPage(),
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 200),
+      ),
+    );
   }
 
   Widget _buildQuickAction({

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../bloc/attendance_recap/attendance_recap_state.dart';
 import '../models/attendance_record.dart';
 import 'package:intl/intl.dart';
 
@@ -8,10 +7,10 @@ class AttendanceHistoryList extends StatelessWidget {
   final ScrollController scrollController;
 
   const AttendanceHistoryList({
-    Key? key,
+    super.key,
     required this.records,
     required this.scrollController,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -77,7 +76,7 @@ class AttendanceHistoryList extends StatelessWidget {
     }
 
     return CircleAvatar(
-      backgroundColor: iconColor.withOpacity(0.1),
+      backgroundColor: iconColor.withValues(alpha: 0.1),
       child: Icon(
         iconData,
         color: iconColor,
@@ -111,7 +110,7 @@ class AttendanceHistoryList extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: chipColor.withOpacity(0.1),
+        color: chipColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: chipColor,
@@ -151,7 +150,10 @@ class AttendanceHistoryList extends StatelessWidget {
             const SizedBox(height: 16),
             _buildDetailRow('Check-in', record.checkInTime),
             _buildDetailRow('Check-out', record.checkOutTime),
+            if (record.batasJamMasuk != null)
+              _buildDetailRow('Batas Masuk', record.batasJamMasuk!),
             _buildDetailRow('Status', record.notes),
+            _buildDetailRow('Keterlambatan', record.isLate ? 'Ya' : 'Tidak'),
             const SizedBox(height: 16),
             _buildStatusChip(record.type),
           ],

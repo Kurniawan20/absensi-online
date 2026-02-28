@@ -84,19 +84,11 @@ class AttendanceReminderService {
     // Cancel any existing reminders
     await cancelCheckOutReminders();
 
-    // ⚠️ TESTING MODE: Quick reminders for testing
-    // TODO: Revert to production timing before release
-    // Production: 30 minutes before check-out (8 hours after check-in)
-    // Testing: 2 minutes after check-in
-
     // Calculate check-out time (8 hours after check-in)
     final checkOutTime = checkInTime.add(Duration(hours: workHours));
 
-    // TESTING: Schedule reminder 2 minutes after check-in (instead of 30 min before checkout)
-    final reminderTime = checkInTime.add(const Duration(minutes: 2));
-
-    // Production version (commented out for testing):
-    // final reminderTime = checkOutTime.subtract(const Duration(minutes: 30));
+    // Schedule reminder 30 minutes before check-out
+    final reminderTime = checkOutTime.subtract(const Duration(minutes: 30));
 
     // Only schedule if reminder time is in the future
     if (reminderTime.isAfter(DateTime.now())) {
@@ -110,14 +102,11 @@ class AttendanceReminderService {
       );
 
       print(
-          '✅ [TESTING] Check-out reminder scheduled for: ${_formatTime(reminderTime)} (2 min from now)');
+          '✅ Check-out reminder scheduled for: ${_formatTime(reminderTime)} (30 min before checkout)');
     }
 
-    // TESTING: Schedule late reminder 4 minutes after check-in (instead of 1 hour after checkout)
-    final lateReminderTime = checkInTime.add(const Duration(minutes: 4));
-
-    // Production version (commented out for testing):
-    // final lateReminderTime = checkOutTime.add(const Duration(hours: 1));
+    // Schedule late reminder 1 hour after expected check-out time
+    final lateReminderTime = checkOutTime.add(const Duration(hours: 1));
 
     if (lateReminderTime.isAfter(DateTime.now())) {
       await _scheduleNotification(
@@ -129,7 +118,7 @@ class AttendanceReminderService {
       );
 
       print(
-          '✅ [TESTING] Late check-out reminder scheduled for: ${_formatTime(lateReminderTime)} (4 min from now)');
+          '✅ Late check-out reminder scheduled for: ${_formatTime(lateReminderTime)} (1 hour after checkout)');
     }
 
     // Save reminder status
@@ -180,7 +169,7 @@ class AttendanceReminderService {
       body,
       scheduledDate,
       details,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
       payload: payload,
@@ -258,7 +247,7 @@ class AttendanceReminderService {
       'Jangan lupa absen pulang sebelum meninggalkan kantor.',
       scheduledTZDate,
       details,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents:

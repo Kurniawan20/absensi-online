@@ -2,13 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:monitoring_project/Models/DataEmployee.dart';
+import 'package:monitoring_project/Models/data_employee.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:http/http.dart' as http;
+
 import 'package:http/io_client.dart';
 
-import '../screens/Apis.dart';
+import '../constants/api_constants.dart';
 import '../utils/storage_config.dart';
 
 class HomeController {
@@ -17,8 +16,7 @@ class HomeController {
   final storage = StorageConfig.secureStorage;
 
   Future<void> initializePreference() async {
-    this.preferences = await SharedPreferences.getInstance();
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+    preferences = await SharedPreferences.getInstance();
   }
 
   Future<String?> getUsername() async {
@@ -27,7 +25,7 @@ class HomeController {
     return _sharedPreferences.getString("npp");
   }
 
-  getNpp() async {
+  Future<String?>? getNpp() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? npp = prefs.getString('npp');
     return npp;
@@ -51,7 +49,8 @@ class HomeController {
       final ioClient = IOClient(httpClient);
 
       final response = await ioClient
-          .get(Uri.parse(ApiConstants.BASE_URL + "/getblog/${npp}"), headers: {
+          // ignore: deprecated_member_use_from_same_package
+          .get(Uri.parse('${ApiConstants.blogsLegacy}/$npp'), headers: {
         'Content-Type': 'application/json; charset=UTF-8',
         'Authorization': 'Bearer $token'
       }).timeout(
@@ -62,17 +61,36 @@ class HomeController {
       );
 
       if (response.statusCode == 200) {
-        List jsonResponse = json.decode(response.body);
-        return jsonResponse
-            .map((data) => DataEmployee.fromJson(data))
-            .toList();
+        final responseData = json.decode(response.body);
+        List jsonResponse;
+
+        // Handle wrapped API response format: {rcode, message, data}
+        if (responseData is Map<String, dynamic>) {
+          if (responseData['rcode'] == '00' ||
+              responseData['rcode'] == 'S' ||
+              responseData['status'] == 'success') {
+            jsonResponse = responseData['data'] ?? [];
+          } else {
+            // API returned error
+            final message =
+                responseData['message'] ?? 'Failed to fetch employee data';
+            throw Exception(message);
+          }
+        } else if (responseData is List) {
+          // Legacy: direct array response
+          jsonResponse = responseData;
+        } else {
+          throw Exception('Unexpected response format');
+        }
+
+        return jsonResponse.map((data) => DataEmployee.fromJson(data)).toList();
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized: Invalid or expired token');
       } else {
         throw HttpException(
             'Server returned ${response.statusCode}: ${response.body}');
       }
-    } on SocketException catch (e) {
+    } on SocketException catch (_) {
       throw Exception('Network error: Please check your internet connection');
     } on TimeoutException catch (e) {
       throw Exception('Connection timeout: $e');

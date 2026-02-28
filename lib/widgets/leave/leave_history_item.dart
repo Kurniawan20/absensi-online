@@ -10,11 +10,11 @@ class LeaveHistoryItem extends StatelessWidget {
   final bool showFullDate;
 
   const LeaveHistoryItem({
-    Key? key,
+    super.key,
     required this.request,
     this.onTap,
     this.showFullDate = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +39,7 @@ class LeaveHistoryItem extends StatelessWidget {
             border: Border.all(color: Colors.grey[200]!),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -52,7 +52,7 @@ class LeaveHistoryItem extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: request.type.color.withOpacity(0.1),
+                  color: request.type.color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(

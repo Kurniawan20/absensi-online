@@ -7,10 +7,10 @@ import '../services/secure_storage_service.dart';
 import 'terms_and_conditions_page.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({Key? key}) : super(key: key);
+  const SettingsPage({super.key});
 
   @override
-  _SettingsPageState createState() => _SettingsPageState();
+  State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> {
@@ -307,7 +307,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   });
                   _saveSettings();
                 },
-                activeColor: const Color.fromRGBO(1, 101, 65, 1),
+                activeThumbColor: const Color.fromRGBO(1, 101, 65, 1),
               ),
             ),
             const Divider(height: 1),
@@ -326,7 +326,7 @@ class _SettingsPageState extends State<SettingsPage> {
               trailing: Switch(
                 value: _biometricEnabled,
                 onChanged: _onBiometricToggle,
-                activeColor: const Color.fromRGBO(1, 101, 65, 1),
+                activeThumbColor: const Color.fromRGBO(1, 101, 65, 1),
               ),
             ),
             const Divider(height: 1),

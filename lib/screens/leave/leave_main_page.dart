@@ -15,7 +15,7 @@ import 'leave_detail_page.dart';
 
 /// Halaman utama fitur Izin & Cuti
 class LeaveMainPage extends StatefulWidget {
-  const LeaveMainPage({Key? key}) : super(key: key);
+  const LeaveMainPage({super.key});
 
   @override
   State<LeaveMainPage> createState() => _LeaveMainPageState();

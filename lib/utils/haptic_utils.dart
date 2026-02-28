@@ -74,12 +74,12 @@ class HapticButton extends StatelessWidget {
   final ButtonStyle? style;
 
   const HapticButton({
-    Key? key,
+    super.key,
     required this.onPressed,
     required this.child,
     this.hapticType = HapticType.light,
     this.style,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -116,13 +116,13 @@ class HapticIconButton extends StatelessWidget {
   final Color? color;
 
   const HapticIconButton({
-    Key? key,
+    super.key,
     required this.onPressed,
     required this.icon,
     this.hapticType = HapticType.selection,
     this.tooltip,
     this.color,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -8,22 +8,44 @@ class AvatarService extends ChangeNotifier {
 
   static const String _avatarKey = 'selected_avatar';
 
-  // Available avatars
+  // Daftar avatar yang tersedia, dikelompokkan berdasarkan gender
+  // Gender: '01' = Pria, '02' = Wanita
   static const List<Map<String, String>> availableAvatars = [
     {
       'id': 'male',
       'path': 'assets/images/avatar_male.png',
-      'label': 'Pria',
+      'label': 'Avatar 1',
+      'gender': '01',
+    },
+    {
+      'id': 'male_2',
+      'path': 'assets/images/avatar_male_2.png',
+      'label': 'Avatar 2',
+      'gender': '01',
     },
     {
       'id': 'female',
       'path': 'assets/images/avatar_female.png',
-      'label': 'Wanita',
+      'label': 'Avatar 1',
+      'gender': '02',
+    },
+    {
+      'id': 'female_2',
+      'path': 'assets/images/avatar_female_2.png',
+      'label': 'Avatar 2',
+      'gender': '02',
     },
   ];
 
-  // Default avatar
-  static const String defaultAvatar = 'assets/images/avatar_male.png';
+  /// Mengambil daftar avatar sesuai gender user dari SharedPreferences
+  static Future<List<Map<String, String>>> getAvatarsByGender() async {
+    final prefs = await SharedPreferences.getInstance();
+    final gender = prefs.getString('gender') ?? '01';
+    return availableAvatars.where((a) => a['gender'] == gender).toList();
+  }
+
+  // Default avatar (Ramadhan: gunakan avatar berpeci)
+  static const String defaultAvatar = 'assets/images/avatar_male_2.png';
 
   // Current selected avatar (cached)
   String _currentAvatar = defaultAvatar;

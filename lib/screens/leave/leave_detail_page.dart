@@ -13,9 +13,9 @@ class LeaveDetailPage extends StatelessWidget {
   final LeaveRequest request;
 
   const LeaveDetailPage({
-    Key? key,
+    super.key,
     required this.request,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -117,7 +117,7 @@ class LeaveDetailPage extends StatelessWidget {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: request.status.color.withOpacity(0.2),
+              color: request.status.color.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
@@ -145,7 +145,7 @@ class LeaveDetailPage extends StatelessWidget {
                   _getStatusDescription(),
                   style: TextStyle(
                     fontSize: 13,
-                    color: request.status.color.withOpacity(0.8),
+                    color: request.status.color.withValues(alpha: 0.8),
                     fontFamily: 'Poppins',
                   ),
                 ),
@@ -179,7 +179,7 @@ class LeaveDetailPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -195,7 +195,7 @@ class LeaveDetailPage extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: request.type.color.withOpacity(0.1),
+                  color: request.type.color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -331,7 +331,7 @@ class LeaveDetailPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -403,7 +403,7 @@ class LeaveDetailPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),

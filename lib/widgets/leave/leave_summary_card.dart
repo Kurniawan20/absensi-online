@@ -7,10 +7,10 @@ class LeaveSummaryCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   const LeaveSummaryCard({
-    Key? key,
+    super.key,
     required this.balance,
     this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -32,13 +32,13 @@ class LeaveSummaryCard extends StatelessWidget {
               end: Alignment.bottomRight,
               colors: [
                 const Color(0xFF016541),
-                const Color(0xFF016541).withOpacity(0.8),
+                const Color(0xFF016541).withValues(alpha: 0.8),
               ],
             ),
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF016541).withOpacity(0.3),
+                color: const Color(0xFF016541).withValues(alpha: 0.3),
                 blurRadius: 12,
                 offset: const Offset(0, 6),
               ),
@@ -65,7 +65,7 @@ class LeaveSummaryCard extends StatelessWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -115,7 +115,7 @@ class LeaveSummaryCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
                   value: percentage,
-                  backgroundColor: Colors.white.withOpacity(0.3),
+                  backgroundColor: Colors.white.withValues(alpha: 0.3),
                   valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
                   minHeight: 8,
                 ),

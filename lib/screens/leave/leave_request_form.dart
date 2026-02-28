@@ -14,9 +14,9 @@ class LeaveRequestForm extends StatefulWidget {
   final LeaveType leaveType;
 
   const LeaveRequestForm({
-    Key? key,
+    super.key,
     required this.leaveType,
-  }) : super(key: key);
+  });
 
   @override
   State<LeaveRequestForm> createState() => _LeaveRequestFormState();
@@ -138,10 +138,10 @@ class _LeaveRequestFormState extends State<LeaveRequestForm> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: widget.leaveType.color.withOpacity(0.1),
+        color: widget.leaveType.color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: widget.leaveType.color.withOpacity(0.3),
+          color: widget.leaveType.color.withValues(alpha: 0.3),
         ),
       ),
       child: Row(
@@ -150,7 +150,7 @@ class _LeaveRequestFormState extends State<LeaveRequestForm> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: widget.leaveType.color.withOpacity(0.2),
+              color: widget.leaveType.color.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
@@ -228,7 +228,7 @@ class _LeaveRequestFormState extends State<LeaveRequestForm> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: const Color(0xFF016541).withOpacity(0.1),
+              color: const Color(0xFF016541).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
@@ -408,10 +408,10 @@ class _LeaveRequestFormState extends State<LeaveRequestForm> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFF016541).withOpacity(0.05),
+              color: const Color(0xFF016541).withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: const Color(0xFF016541).withOpacity(0.2),
+                color: const Color(0xFF016541).withValues(alpha: 0.2),
               ),
             ),
             child: Row(
@@ -714,7 +714,7 @@ class _LeaveRequestFormState extends State<LeaveRequestForm> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF016541).withOpacity(0.1),
+                color: const Color(0xFF016541).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Icon(icon, color: const Color(0xFF016541), size: 24),
@@ -765,7 +765,7 @@ class _LeaveRequestFormState extends State<LeaveRequestForm> {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: const Color(0xFF016541).withOpacity(0.1),
+                color: const Color(0xFF016541).withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(

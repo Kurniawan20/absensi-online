@@ -35,10 +35,11 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace "id.basitd.absensi.mobile"
-    compileSdk 35
-    ndkVersion "26.1.10909125"  // Explicit NDK version for symbol stripping
+    compileSdk 36
+    ndkVersion "27.0.12077973"  // NDK 27+ diperlukan untuk dukungan 16KB page size
 
     compileOptions {
+        coreLibraryDesugaringEnabled true
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
@@ -101,6 +102,6 @@ flutter {
 }
 
 dependencies {
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
     implementation 'androidx.multidex:multidex:2.0.1'
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
 }

@@ -12,6 +12,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     on<LoadAttendanceStatus>(_onLoadAttendanceStatus);
     on<LoadAnnouncements>(_onLoadAnnouncements);
     on<LoadBlogPosts>(_onLoadBlogPosts);
+    on<LoadFeaturedBlogs>(_onLoadFeaturedBlogs);
     on<RefreshHomeData>(_onRefreshHomeData);
     on<LogoutRequested>(_onLogoutRequested);
   }
@@ -26,14 +27,16 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       final userProfile = await homeRepository.getUserProfile();
       final attendanceStatus = await homeRepository.getAttendanceStatus();
       final announcements = await homeRepository.getAnnouncements();
-      final blogResult = await homeRepository.getBlogPosts();
+      final blogPosts = await homeRepository.getBlogPosts();
+      final featuredBlogs = await homeRepository.getFeaturedBlogs();
 
       emit(HomeLoadSuccess(
         userProfile: userProfile,
         attendanceStatus: attendanceStatus,
         announcements: announcements,
-        blogPosts: blogResult['posts'],
-        hasMorePosts: blogResult['hasMore'],
+        blogPosts: blogPosts,
+        featuredBlogs: featuredBlogs,
+        hasMorePosts: blogPosts.length >= 10,
       ));
     } catch (e) {
       emit(HomeError(e.toString()));
@@ -101,19 +104,62 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     try {
       if (state is HomeLoadSuccess) {
         final currentState = state as HomeLoadSuccess;
-        final blogResult = await homeRepository.getBlogPosts(
-          page: event.page,
+        
+        final blogPosts = await homeRepository.getBlogPosts(
+          category: event.category,
           limit: event.limit,
         );
 
-        final updatedPosts = event.page == 1
-            ? blogResult['posts']
-            : [...currentState.blogPosts, ...blogResult['posts']];
-
         emit(currentState.copyWith(
-          blogPosts: updatedPosts,
-          hasMorePosts: blogResult['hasMore'],
+          blogPosts: blogPosts,
+          hasMorePosts: blogPosts.length >= event.limit,
         ));
+      } else {
+        // If initial load
+        emit(HomeLoading());
+        
+        final blogPosts = await homeRepository.getBlogPosts(
+          category: event.category,
+          limit: event.limit,
+        );
+
+        // We need other data too, try to load everything
+        try {
+          final userProfile = await homeRepository.getUserProfile();
+          final attendanceStatus = await homeRepository.getAttendanceStatus();
+          final announcements = await homeRepository.getAnnouncements();
+          final featuredBlogs = await homeRepository.getFeaturedBlogs();
+
+          emit(HomeLoadSuccess(
+            userProfile: userProfile,
+            attendanceStatus: attendanceStatus,
+            announcements: announcements,
+            blogPosts: blogPosts,
+            featuredBlogs: featuredBlogs,
+            hasMorePosts: blogPosts.length >= event.limit,
+          ));
+        } catch (e) {
+          emit(HomeError(e.toString()));
+        }
+      }
+    } catch (e) {
+      emit(HomeError(e.toString()));
+    }
+  }
+
+  Future<void> _onLoadFeaturedBlogs(
+    LoadFeaturedBlogs event,
+    Emitter<HomeState> emit,
+  ) async {
+    try {
+      if (state is HomeLoadSuccess) {
+        final currentState = state as HomeLoadSuccess;
+        
+        final featuredBlogs = await homeRepository.getFeaturedBlogs(
+          limit: event.limit,
+        );
+
+        emit(currentState.copyWith(featuredBlogs: featuredBlogs));
       }
     } catch (e) {
       emit(HomeError(e.toString()));
@@ -129,14 +175,16 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         final userProfile = await homeRepository.getUserProfile();
         final attendanceStatus = await homeRepository.getAttendanceStatus();
         final announcements = await homeRepository.getAnnouncements();
-        final blogResult = await homeRepository.getBlogPosts();
+        final blogPosts = await homeRepository.getBlogPosts();
+        final featuredBlogs = await homeRepository.getFeaturedBlogs();
 
         emit(HomeLoadSuccess(
           userProfile: userProfile,
           attendanceStatus: attendanceStatus,
           announcements: announcements,
-          blogPosts: blogResult['posts'],
-          hasMorePosts: blogResult['hasMore'],
+          blogPosts: blogPosts,
+          featuredBlogs: featuredBlogs,
+          hasMorePosts: blogPosts.length >= 10,
         ));
       }
     } catch (e) {

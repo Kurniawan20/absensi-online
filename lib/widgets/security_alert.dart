@@ -9,18 +9,18 @@ class SecurityAlert extends StatelessWidget {
   final bool canDismiss;
 
   const SecurityAlert({
-    Key? key,
+    super.key,
     required this.title,
     required this.message,
     required this.violations,
     this.onPressed,
     this.canDismiss = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async => canDismiss,
+    return PopScope(
+      canPop: canDismiss,
       child: AlertDialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
@@ -75,7 +75,7 @@ class SecurityAlert extends StatelessWidget {
                   ],
                 ),
               ),
-              
+
               // Content
               Padding(
                 padding: const EdgeInsets.all(24),
@@ -92,7 +92,7 @@ class SecurityAlert extends StatelessWidget {
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    
+
                     if (violations.isNotEmpty) ...[
                       const SizedBox(height: 20),
                       Container(
@@ -120,41 +120,43 @@ class SecurityAlert extends StatelessWidget {
                             ),
                             const SizedBox(height: 8),
                             ...violations.map((violation) => Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Icon(
-                                    FluentIcons.error_circle_24_filled,
-                                    size: 16,
-                                    color: Colors.red.shade600,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      violation,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.red.shade700,
-                                        fontFamily: 'Poppins',
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Icon(
+                                        FluentIcons.error_circle_24_filled,
+                                        size: 16,
+                                        color: Colors.red.shade600,
                                       ),
-                                    ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          violation,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.red.shade700,
+                                            fontFamily: 'Poppins',
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
-                            )).toList(),
+                                )),
                           ],
                         ),
                       ),
                     ],
-                    
+
                     const SizedBox(height: 24),
-                    
+
                     // Action Button
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: onPressed ?? () => Navigator.of(context).pop(),
+                        onPressed:
+                            onPressed ?? () => Navigator.of(context).pop(),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red.shade600,
                           foregroundColor: Colors.white,

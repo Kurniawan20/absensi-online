@@ -1,15 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
-import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart' show IOClient;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:jwt_decode/jwt_decode.dart';
-import 'package:flutter/foundation.dart';
 import '../constants/api_constants.dart';
 import '../services/secure_storage_service.dart';
+import '../services/device_info_service.dart';
+import '../services/avatar_service.dart';
+import '../models/office_location.dart';
 import '../utils/storage_config.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class LoginRepository {
   final storage = StorageConfig.secureStorage;
@@ -33,19 +33,24 @@ class LoginRepository {
       // Clean and format the input data
       final cleanNpp = email.trim();
       final cleanDeviceId = deviceId.trim();
-      
+
       // Detect platform correctly
       final platformName = Platform.isIOS ? 'ios' : 'android';
+
+      // Get device info for backend logging
+      final deviceInfoService = DeviceInfoService();
+      final deviceInfo = await deviceInfoService.getDeviceInfo();
 
       // Log the request details
       print('Attempting login with:');
       print('NPP: $cleanNpp');
       print('Device ID: $cleanDeviceId');
       print('Platform: $platformName');
+      print('Device Info: $deviceInfo');
 
       final loginResponse = await _client
           .post(
-            Uri.parse(ApiConstants.LOGIN),
+            Uri.parse(ApiConstants.login),
             headers: {
               'Content-Type': 'application/json; charset=UTF-8',
               'Accept': 'application/json',
@@ -55,25 +60,23 @@ class LoginRepository {
               'npp': cleanNpp,
               'password': password,
               'device_id': cleanDeviceId,
-              'app_version': '1.0.0',
-              'platform': platformName,
+              'device_info': deviceInfo,
             }),
           )
           .timeout(const Duration(seconds: 10));
 
-      print('Login request URL: ${ApiConstants.LOGIN}');
+      print('Login request URL: ${ApiConstants.login}');
       print('Login request headers: ${jsonEncode({
-        'Content-Type': 'application/json; charset=UTF-8',
-        'Accept': 'application/json',
-        'User-Agent': 'Mobile-Presence-App',
-      })}');
+            'Content-Type': 'application/json; charset=UTF-8',
+            'Accept': 'application/json',
+            'User-Agent': 'Mobile-Presence-App',
+          })}');
       print('Login request body: ${jsonEncode({
-        'npp': cleanNpp,
-        'password': '[REDACTED]',
-        'device_id': cleanDeviceId,
-        'app_version': '1.0.0',
-        'platform': platformName,
-      })}');
+            'npp': cleanNpp,
+            'password': '[REDACTED]',
+            'device_id': cleanDeviceId,
+            'device_info': deviceInfo,
+          })}');
       print('Login response status code: ${loginResponse.statusCode}');
       print('Login response headers: ${loginResponse.headers}');
       print('Login response body: ${loginResponse.body}');
@@ -111,7 +114,8 @@ class LoginRepository {
 
       if (loginData['rcode'] != "00") {
         print('Login failed with rcode: ${loginData['rcode']}');
-        final message = loginData['message'] ?? loginData['error'] ?? 'Login gagal';
+        final message =
+            loginData['message'] ?? loginData['error'] ?? 'Login gagal';
         print('Login error message: $message');
         return {
           'success': false,
@@ -122,83 +126,67 @@ class LoginRepository {
       final token = loginData['access_token'];
       await storage.write(key: 'auth_token', value: token);
 
-      // Step 2: Office Data Request
-      print(
-          'Fetching office data for kode_kantor: ${loginData['kode_kantor']}');
-      final kantorResponse = await _client
-          .post(
-            Uri.parse(ApiConstants.KANTOR),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $token'
-            },
-            body: jsonEncode(
-                {'kode_kantor': loginData['kode_kantor'], 'npp': email}),
-          )
-          .timeout(const Duration(seconds: 10));
+      // Parse locations array dari login response
+      final List<OfficeLocation> locations = [];
+      if (loginData['locations'] != null && loginData['locations'] is List) {
+        for (var loc in loginData['locations']) {
+          try {
+            locations.add(OfficeLocation.fromJson(loc));
+          } catch (e) {
+            print('Error parsing location: $e');
+          }
+        }
+      }
 
-      print('Office data response status code: ${kantorResponse.statusCode}');
-      print('Office data response body: ${kantorResponse.body}');
-      print('Office data response headers: ${kantorResponse.headers}');
-
-      if (kantorResponse.statusCode != 200) {
-        print(
-            'Office data request failed with status: ${kantorResponse.statusCode}');
+      // Validasi: locations harus ada minimal 1
+      if (locations.isEmpty) {
+        print('Error: No office locations found in login response');
         return {
           'success': false,
-          'error': 'Failed to get office data: ${kantorResponse.statusCode}',
-          'response': kantorResponse.body,
+          'message':
+              'Data lokasi kantor tidak ditemukan. Silakan hubungi administrator.',
         };
       }
 
-      final kantorData = json.decode(kantorResponse.body);
-      print('Parsed office data: $kantorData');
-
-      // Check for error response
-      if (kantorData['status'] == false || kantorData['rcode'] == '99') {
+      print('Loaded ${locations.length} office location(s):');
+      for (var loc in locations) {
         print(
-            'Office data request failed with status: ${kantorData['status']}, rcode: ${kantorData['rcode']}');
-        return {
-          'success': false,
-          'error': kantorData['message'] ?? 'Failed to get office data',
-          'details': kantorData,
-        };
+            '  - ${loc.nama}: (${loc.latitude}, ${loc.longitude}), radius: ${loc.radius}m');
       }
-
-      // Extract office data with null safety
-      final officeData = kantorData['data'] ?? kantorData;
-      print('Office data structure: $officeData');
-
-      // Extract coordinates with detailed logging
-      String? rawLatitude = officeData['latitude']?.toString();
-      String? rawLongitude = officeData['longitude']?.toString();
-      String? rawRadius = officeData['radius']?.toString();
-
-      print(
-          'Raw coordinates - Lat: $rawLatitude, Long: $rawLongitude, Radius: $rawRadius');
-
-      // Convert office coordinates to double with null safety
-      final officeLatitude = double.tryParse(rawLatitude ?? '0') ?? 0.0;
-      final officeLongitude = double.tryParse(rawLongitude ?? '0') ?? 0.0;
-      final officeRadius = double.tryParse(rawRadius ?? '0') ?? 0.0;
-
-      print(
-          'Converted coordinates - Lat: $officeLatitude, Long: $officeLongitude, Radius: $officeRadius');
 
       // Store user data in SharedPreferences
       final prefs = await SharedPreferences.getInstance();
+
+      // Force reload to ensure we have fresh state before writing
+      await prefs.reload();
+
+      // Simpan gender dan set avatar otomatis berdasarkan gender
+      // Gender: 01 = male (pria), 02 = female (wanita)
+      final gender = loginData['gender']?.toString() ?? '01';
+      final avatarPath = gender == '02'
+          ? AvatarService.getAvatarPathById('female_2')
+          : AvatarService.getAvatarPathById('male_2');
+
       await Future.wait([
         prefs.setString('npp', email),
         prefs.setString('nama', loginData['nama']),
         prefs.setString('token', token),
         prefs.setString('kode_kantor', loginData['kode_kantor']),
         prefs.setString('nama_kantor', loginData['nama_kantor']),
+        prefs.setString('gender', gender),
         prefs.setBool('is_login', true),
-        prefs.setDouble('lat_kantor', officeLatitude),
-        prefs.setDouble('long_kantor', officeLongitude),
-        prefs.setDouble('radius', officeRadius),
         prefs.setString('device_id', deviceId),
+        // Simpan locations sebagai JSON string
+        prefs.setString(
+            'office_locations', OfficeLocation.toJsonString(locations)),
       ]);
+
+      // Set avatar otomatis berdasarkan gender
+      final avatarService = AvatarService();
+      await avatarService.setSelectedAvatar(avatarPath);
+
+      print(
+          'Login data saved successfully with ${locations.length} location(s)');
 
       return {
         'success': true,
@@ -206,9 +194,7 @@ class LoginRepository {
         'nama': loginData['nama'],
         'kode_kantor': loginData['kode_kantor'],
         'nama_kantor': loginData['nama_kantor'],
-        'lat_kantor': officeLatitude,
-        'long_kantor': officeLongitude,
-        'radius': officeRadius,
+        'locations': locations,
         'ket_bidang': loginData['ket_bidang'] ?? '',
       };
     } on SocketException catch (e) {
@@ -249,9 +235,74 @@ class LoginRepository {
 
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
+
+    // Unregister FCM token before clearing data
+    await _unregisterFcmToken();
+
+    // Unsubscribe from broadcast topic
+    try {
+      await FirebaseMessaging.instance.unsubscribeFromTopic('all');
+      print('Unsubscribed from "all" topic');
+    } catch (e) {
+      print('Failed to unsubscribe from topic: $e');
+    }
+
+    // Clear device info cache
+    DeviceInfoService().clearCache();
+
+    // Clear auth data
     await prefs.remove('email');
     await prefs.remove('password');
+    await prefs.remove('npp');
+    await prefs.remove('nama');
+    await prefs.remove('token');
+    await prefs.setBool('is_login', false);
+
+    // Clear office data - PENTING: agar data baru di-load saat login ulang
+    await prefs.remove('kode_kantor');
+    await prefs.remove('nama_kantor');
+    await prefs.remove('office_locations');
+    await prefs.remove('device_id');
+    await prefs.remove('gender');
+
     await _secureStorage.handleLogout();
+  }
+
+  /// Unregister FCM token from backend
+  Future<void> _unregisterFcmToken() async {
+    try {
+      final token = await storage.read(key: 'auth_token');
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+
+      if (token == null || fcmToken == null) {
+        print('FCM Unregister skipped: token or fcmToken is null');
+        return;
+      }
+
+      print('=== Unregistering FCM Token ===');
+      print('FCM Token: ${fcmToken.substring(0, 20)}...');
+
+      final response = await _client
+          .post(
+            Uri.parse(ApiConstants.fcmUnregister),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({'fcm_token': fcmToken}),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        print('FCM token unregistered successfully');
+      } else {
+        print('FCM unregister failed with status: ${response.statusCode}');
+      }
+    } catch (e) {
+      // Don't block logout if FCM unregistration fails
+      print('FCM Unregister error (non-blocking): $e');
+    }
   }
 
   void dispose() {

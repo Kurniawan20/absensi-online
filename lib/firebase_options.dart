@@ -17,7 +17,10 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      return web;
+      throw UnsupportedError(
+        'DefaultFirebaseOptions have not been configured for web - '
+        'you can reconfigure this by running the FlutterFire CLI again.',
+      );
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -25,7 +28,10 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
-        return macos;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for macos - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.windows:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for windows - '
@@ -43,39 +49,20 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyBlTBKNufvJkQ_q_xmul0d0tiKravJZtsg',
-    appId: '1:398639345647:web:34aaf3b68774161239d01a',
-    messagingSenderId: '398639345647',
-    projectId: 'absensi-mobile-bc8bc',
-    authDomain: 'absensi-mobile-bc8bc.firebaseapp.com',
-    storageBucket: 'absensi-mobile-bc8bc.appspot.com',
-    measurementId: 'G-3M512GQWLG',
-  );
-
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCe-q5qOKxClES17dx74cuNPj6L4-KuAfE',
-    appId: '1:398639345647:android:0abbd68a3fc7c65f39d01a',
-    messagingSenderId: '398639345647',
-    projectId: 'absensi-mobile-bc8bc',
-    storageBucket: 'absensi-mobile-bc8bc.appspot.com',
+    apiKey: 'AIzaSyD5YxmtrDrjZDGNZjWa-J7Qm91cVwfT1OE',
+    appId: '1:646216071747:android:aa05d24a2225a5ec2ab2f6',
+    messagingSenderId: '646216071747',
+    projectId: 'haba-1f47f',
+    storageBucket: 'haba-1f47f.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyDFT6KH2D6q_CziIwhy9nQXSR2_Krnjvcw',
-    appId: '1:398639345647:ios:528052184ad0eb9839d01a',
-    messagingSenderId: '398639345647',
-    projectId: 'absensi-mobile-bc8bc',
-    storageBucket: 'absensi-mobile-bc8bc.appspot.com',
-    iosBundleId: 'com.example.absensiOnline',
-  );
-
-  static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyDFT6KH2D6q_CziIwhy9nQXSR2_Krnjvcw',
-    appId: '1:398639345647:ios:528052184ad0eb9839d01a',
-    messagingSenderId: '398639345647',
-    projectId: 'absensi-mobile-bc8bc',
-    storageBucket: 'absensi-mobile-bc8bc.appspot.com',
-    iosBundleId: 'com.example.absensiOnline',
+    apiKey: 'AIzaSyD5YxmtrDrjZDGNZjWa-J7Qm91cVwfT1OE',
+    appId: '1:646216071747:ios:aa05d24a2225a5ec2ab2f6',
+    messagingSenderId: '646216071747',
+    projectId: 'haba-1f47f',
+    storageBucket: 'haba-1f47f.firebasestorage.app',
+    iosBundleId: 'id.basitd.absensi.mobile',
   );
 }

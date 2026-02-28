@@ -2,13 +2,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 class Dialogs {
-  static Future<void> loading(BuildContext context, GlobalKey key, String message) async {
+  static Future<void> loading(
+      BuildContext context, GlobalKey key, String message) async {
     return showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
-        return WillPopScope(
-          onWillPop: () async => false,
+        return PopScope(
+          canPop: false,
           child: Dialog(
             key: key,
             backgroundColor: Colors.white,
@@ -88,12 +89,11 @@ class _LoadingSpinner extends StatefulWidget {
   final Color color;
 
   const _LoadingSpinner({
-    Key? key,
     required this.color,
-  }) : super(key: key);
+  });
 
   @override
-  _LoadingSpinnerState createState() => _LoadingSpinnerState();
+  State<_LoadingSpinner> createState() => _LoadingSpinnerState();
 }
 
 class _LoadingSpinnerState extends State<_LoadingSpinner>

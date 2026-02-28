@@ -8,11 +8,11 @@ class LeaveTypeCard extends StatelessWidget {
   final bool isEnabled;
 
   const LeaveTypeCard({
-    Key? key,
+    super.key,
     required this.type,
     required this.onTap,
     this.isEnabled = true,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +32,7 @@ class LeaveTypeCard extends StatelessWidget {
             boxShadow: isEnabled
                 ? [
                     BoxShadow(
-                      color: type.color.withOpacity(0.1),
+                      color: type.color.withValues(alpha: 0.1),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -49,7 +49,7 @@ class LeaveTypeCard extends StatelessWidget {
                   height: 40,
                   decoration: BoxDecoration(
                     color: isEnabled
-                        ? type.color.withOpacity(0.1)
+                        ? type.color.withValues(alpha: 0.1)
                         : Colors.grey[200],
                     borderRadius: BorderRadius.circular(10),
                   ),

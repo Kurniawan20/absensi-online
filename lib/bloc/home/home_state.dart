@@ -1,4 +1,7 @@
 import 'package:equatable/equatable.dart';
+import '../../models/blog_post.dart';
+
+export '../../models/blog_post.dart';
 
 abstract class HomeState extends Equatable {
   const HomeState();
@@ -16,6 +19,7 @@ class HomeLoadSuccess extends HomeState {
   final AttendanceStatus attendanceStatus;
   final List<Announcement> announcements;
   final List<BlogPost> blogPosts;
+  final List<BlogPost> featuredBlogs;
   final bool hasMorePosts;
 
   const HomeLoadSuccess({
@@ -23,6 +27,7 @@ class HomeLoadSuccess extends HomeState {
     required this.attendanceStatus,
     required this.announcements,
     required this.blogPosts,
+    this.featuredBlogs = const [],
     this.hasMorePosts = false,
   });
 
@@ -32,6 +37,7 @@ class HomeLoadSuccess extends HomeState {
         attendanceStatus,
         announcements,
         blogPosts,
+        featuredBlogs,
         hasMorePosts,
       ];
 
@@ -40,6 +46,7 @@ class HomeLoadSuccess extends HomeState {
     AttendanceStatus? attendanceStatus,
     List<Announcement>? announcements,
     List<BlogPost>? blogPosts,
+    List<BlogPost>? featuredBlogs,
     bool? hasMorePosts,
   }) {
     return HomeLoadSuccess(
@@ -47,6 +54,7 @@ class HomeLoadSuccess extends HomeState {
       attendanceStatus: attendanceStatus ?? this.attendanceStatus,
       announcements: announcements ?? this.announcements,
       blogPosts: blogPosts ?? this.blogPosts,
+      featuredBlogs: featuredBlogs ?? this.featuredBlogs,
       hasMorePosts: hasMorePosts ?? this.hasMorePosts,
     );
   }
@@ -146,35 +154,6 @@ class Announcement {
       date: DateTime.parse(json['date'] ?? DateTime.now().toIso8601String()),
       imageUrl: json['image_url'],
       isImportant: json['is_important'] ?? false,
-    );
-  }
-}
-
-class BlogPost {
-  final String id;
-  final String title;
-  final String summary;
-  final String url;
-  final DateTime date;
-  final String? thumbnailUrl;
-
-  BlogPost({
-    required this.id,
-    required this.title,
-    required this.summary,
-    required this.url,
-    required this.date,
-    this.thumbnailUrl,
-  });
-
-  factory BlogPost.fromJson(Map<String, dynamic> json) {
-    return BlogPost(
-      id: json['id'] ?? '',
-      title: json['title'] ?? '',
-      summary: json['summary'] ?? '',
-      url: json['url'] ?? '',
-      date: DateTime.parse(json['date'] ?? DateTime.now().toIso8601String()),
-      thumbnailUrl: json['thumbnail_url'],
     );
   }
 }

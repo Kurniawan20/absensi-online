@@ -8,12 +8,12 @@ class SkeletonLoading extends StatefulWidget {
   final bool isCircle;
 
   const SkeletonLoading({
-    Key? key,
+    super.key,
     this.width = double.infinity,
     this.height = 16,
     this.borderRadius,
     this.isCircle = false,
-  }) : super(key: key);
+  });
 
   @override
   State<SkeletonLoading> createState() => _SkeletonLoadingState();
@@ -80,7 +80,7 @@ class _SkeletonLoadingState extends State<SkeletonLoading>
 class SkeletonCard extends StatelessWidget {
   final double height;
 
-  const SkeletonCard({Key? key, this.height = 80}) : super(key: key);
+  const SkeletonCard({super.key, this.height = 80});
 
   @override
   Widget build(BuildContext context) {
@@ -124,11 +124,11 @@ class SkeletonList extends StatelessWidget {
   final EdgeInsets padding;
 
   const SkeletonList({
-    Key? key,
+    super.key,
     this.itemCount = 5,
     this.itemHeight = 80,
     this.padding = const EdgeInsets.all(16),
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -146,7 +146,7 @@ class SkeletonList extends StatelessWidget {
 
 /// Skeleton for attendance card
 class SkeletonAttendanceCard extends StatelessWidget {
-  const SkeletonAttendanceCard({Key? key}) : super(key: key);
+  const SkeletonAttendanceCard({super.key});
 
   @override
   Widget build(BuildContext context) {

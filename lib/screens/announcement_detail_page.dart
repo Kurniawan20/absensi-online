@@ -6,9 +6,9 @@ class AnnouncementDetailPage extends StatelessWidget {
   final Map<String, String> announcement;
 
   const AnnouncementDetailPage({
-    Key? key,
+    super.key,
     required this.announcement,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

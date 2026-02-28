@@ -1,87 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import './home_page.dart';
-import './page_presence.dart';
 import './page_login.dart';
 import './settings_page.dart';
-import 'dart:math' as math;
 import '../utils/storage_config.dart';
 import '../services/avatar_service.dart';
-
-class CirclePatternPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withOpacity(0.05)
-      ..style = PaintingStyle.fill;
-
-    // Create a pattern of circles
-    final random = math.Random(42); // Fixed seed for consistent pattern
-    for (int i = 0; i < 50; i++) {
-      final x = random.nextDouble() * size.width;
-      final y = random.nextDouble() * size.height;
-      final radius = random.nextDouble() * 20 + 5;
-      canvas.drawCircle(Offset(x, y), radius, paint);
-    }
-
-    // Add some diagonal lines
-    final linePaint = Paint()
-      ..color = Colors.white.withOpacity(0.03)
-      ..strokeWidth = 15
-      ..style = PaintingStyle.stroke;
-
-    for (int i = -5; i < 20; i++) {
-      final y = i * 50.0;
-      canvas.drawLine(
-        Offset(-50, y),
-        Offset(size.width + 50, y + size.width),
-        linePaint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(CustomPainter oldDelegate) => false;
-}
-
-class GeometricPatternPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.black.withOpacity(0.1)
-      ..style = PaintingStyle.fill;
-
-    // Create overlapping rectangles
-    var path1 = Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width * 0.7, 0)
-      ..lineTo(size.width * 0.5, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-
-    var path2 = Path()
-      ..moveTo(size.width * 0.5, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width * 0.8, size.height)
-      ..lineTo(size.width * 0.3, size.height)
-      ..close();
-
-    // Draw the paths with different opacities
-    canvas.drawPath(path1, paint..color = Colors.black.withOpacity(0.05));
-    canvas.drawPath(path2, paint..color = Colors.black.withOpacity(0.07));
-  }
-
-  @override
-  bool shouldRepaint(CustomPainter oldDelegate) => false;
-}
+import '../painters/islamic_arch_painter.dart';
 
 class Profile extends StatefulWidget {
-  const Profile({Key? key}) : super(key: key);
+  const Profile({super.key});
 
   @override
-  _ProfileState createState() => _ProfileState();
+  State<Profile> createState() => _ProfileState();
 }
 
 class _ProfileState extends State<Profile> {
@@ -155,81 +85,89 @@ class _ProfileState extends State<Profile> {
                 fontFamily: 'Poppins',
               ),
             ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: AvatarService.availableAvatars.map((avatar) {
-                final isSelected = avatar['path'] == _selectedAvatar;
-                return GestureDetector(
-                  onTap: () async {
-                    final avatarService = AvatarService();
-                    await avatarService.setSelectedAvatar(avatar['path']!);
-                    setState(() {
-                      _selectedAvatar = avatar['path']!;
-                    });
-                    Navigator.pop(context);
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: isSelected
-                                  ? const Color.fromRGBO(1, 101, 65, 1)
-                                  : Colors.transparent,
-                              width: 3,
-                            ),
-                          ),
-                          child: ClipOval(
-                            child: Image.asset(
-                              avatar['path']!,
-                              width: 80,
-                              height: 80,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          avatar['label']!,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: isSelected
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                            color: isSelected
-                                ? const Color.fromRGBO(1, 101, 65, 1)
-                                : Colors.grey[700],
-                            fontFamily: 'Poppins',
-                          ),
-                        ),
-                        if (isSelected)
-                          Container(
-                            margin: const EdgeInsets.only(top: 4),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color.fromRGBO(1, 101, 65, 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Text(
-                              'Terpilih',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Color.fromRGBO(1, 101, 65, 1),
-                                fontWeight: FontWeight.w500,
+            FutureBuilder<List<Map<String, String>>>(
+              future: AvatarService.getAvatarsByGender(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final avatars = snapshot.data!;
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: avatars.map((avatar) {
+                    final isSelected = avatar['path'] == _selectedAvatar;
+                    return GestureDetector(
+                      onTap: () async {
+                        final avatarService = AvatarService();
+                        await avatarService.setSelectedAvatar(avatar['path']!);
+                        setState(() {
+                          _selectedAvatar = avatar['path']!;
+                        });
+                        Navigator.pop(context);
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isSelected
+                                      ? const Color.fromRGBO(1, 101, 65, 1)
+                                      : Colors.transparent,
+                                  width: 3,
+                                ),
+                              ),
+                              child: ClipOval(
+                                child: Image.asset(
+                                  avatar['path']!,
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.cover,
+                                ),
                               ),
                             ),
-                          ),
-                      ],
-                    ),
-                  ),
+                            const SizedBox(height: 8),
+                            Text(
+                              avatar['label']!,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                color: isSelected
+                                    ? const Color.fromRGBO(1, 101, 65, 1)
+                                    : Colors.grey[700],
+                                fontFamily: 'Poppins',
+                              ),
+                            ),
+                            if (isSelected)
+                              Container(
+                                margin: const EdgeInsets.only(top: 4),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color.fromRGBO(1, 101, 65, 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Text(
+                                  'Terpilih',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Color.fromRGBO(1, 101, 65, 1),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
                 );
-              }).toList(),
+              },
             ),
             const SizedBox(height: 24),
           ],
@@ -294,10 +232,10 @@ class _ProfileState extends State<Profile> {
               ),
               child: Stack(
                 children: [
-                  CustomPaint(
-                    painter: GeometricPatternPainter(),
-                    size: Size(
-                        double.infinity, 300), // Match the container height
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: IslamicArchPainter(),
+                    ),
                   ),
                   Positioned.fill(
                     child: Align(
@@ -357,7 +295,7 @@ class _ProfileState extends State<Profile> {
                               name ?? 'Loading...',
                               textAlign: TextAlign.center,
                               style: const TextStyle(
-                                fontSize: 20,
+                                fontSize: 17,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
                                 fontFamily: 'Poppins',
@@ -368,8 +306,8 @@ class _ProfileState extends State<Profile> {
                               npp ?? '',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 18,
+                                color: Colors.white.withValues(alpha: 0.8),
                                 fontFamily: 'Poppins',
                               ),
                             ),

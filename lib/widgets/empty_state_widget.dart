@@ -10,14 +10,14 @@ class EmptyStateWidget extends StatelessWidget {
   final String? actionLabel;
 
   const EmptyStateWidget({
-    Key? key,
+    super.key,
     required this.title,
     this.subtitle,
     this.icon = Icons.inbox_outlined,
     this.iconColor,
     this.onActionPressed,
     this.actionLabel,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +35,7 @@ class EmptyStateWidget extends StatelessWidget {
               width: 120,
               height: 120,
               decoration: BoxDecoration(
-                color: effectiveIconColor!.withOpacity(0.1),
+                color: effectiveIconColor!.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(

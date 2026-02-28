@@ -2,8 +2,8 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 
 class EmulatorWarning extends StatelessWidget {
-  var message;
-  EmulatorWarning({Key? key, required this.message}) : super(key: key);
+  final String message;
+  const EmulatorWarning({super.key, required this.message});
 
   @override
   Widget build(BuildContext context) {

@@ -1,11 +1,9 @@
 import 'dart:convert';
 import 'dart:math' show min;
 import 'package:http/http.dart' as http;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/api_constants.dart';
-import '../bloc/presence/presence_state.dart';
 import '../utils/storage_config.dart';
 
 class PresenceRepository {
@@ -18,10 +16,11 @@ class PresenceRepository {
     try {
       final storage = StorageConfig.secureStorage;
       final token = await storage.read(key: 'auth_token');
-      
+
       print('\n=== Making attendance request (check-in) ===');
-      print('URL: ${ApiConstants.BASE_URL}/absenmasuk');
-      print('Headers: Authorization: Bearer ${token?.substring(0, min(10, token?.length ?? 0))}...');
+      print('URL: ${ApiConstants.baseUrl}/absenmasuk');
+      print(
+          'Headers: Authorization: Bearer ${token?.substring(0, min(10, token.length))}...');
       print('Body: {');
       print('  latitude: $latitude,');
       print('  longitude: $longitude,');
@@ -35,7 +34,7 @@ class PresenceRepository {
 
       final response = await http
           .post(
-            Uri.parse('${ApiConstants.BASE_URL}/absenmasuk'),
+            Uri.parse(ApiConstants.attendanceCheckIn),
             headers: {
               'Content-Type': 'application/json',
               'Authorization': 'Bearer $token',
@@ -84,10 +83,11 @@ class PresenceRepository {
     try {
       final storage = StorageConfig.secureStorage;
       final token = await storage.read(key: 'auth_token');
-      
+
       print('\n=== Making attendance request (checkout) ===');
-      print('URL: ${ApiConstants.BASE_URL}/absenpulang');
-      print('Headers: Authorization: Bearer ${token?.substring(0, min(10, token?.length ?? 0))}...');
+      print('URL: ${ApiConstants.baseUrl}/absenpulang');
+      print(
+          'Headers: Authorization: Bearer ${token?.substring(0, min(10, token.length))}...');
       print('Body: {');
       print('  latitude: $latitude,');
       print('  longitude: $longitude,');
@@ -101,7 +101,7 @@ class PresenceRepository {
 
       final response = await http
           .post(
-            Uri.parse('${ApiConstants.BASE_URL}/absenpulang'),
+            Uri.parse(ApiConstants.attendanceCheckOut),
             headers: {
               'Content-Type': 'application/json',
               'Authorization': 'Bearer $token',

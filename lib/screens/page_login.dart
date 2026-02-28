@@ -7,26 +7,30 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:android_id/android_id.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import '../bloc/login/login_bloc.dart';
 import '../bloc/login/login_event.dart';
 import '../bloc/login/login_state.dart';
+import '../bloc/notification/notification_bloc.dart';
+import '../bloc/notification/notification_event.dart';
 
 import './main_layout.dart';
 import '../services/biometric_service.dart';
 import '../services/secure_storage_service.dart';
 import '../services/session_manager.dart';
+import '../services/device_info_service.dart';
 
 import '../utils/storage_config.dart';
 import './reset_device_page.dart';
 
 class Login extends StatefulWidget {
-  const Login({Key? key}) : super(key: key);
+  const Login({super.key});
   static const String id = 'login';
 
   @override
-  _LoginState createState() => _LoginState();
+  State<Login> createState() => _LoginState();
 }
 
 class _LoginState extends State<Login> {
@@ -41,7 +45,6 @@ class _LoginState extends State<Login> {
 
   bool _passwordVisible = false;
   String _androidId = 'Unknown';
-  Position? _currentPosition;
   bool _isBiometricAvailable = false;
   bool _showBiometricButton = false;
   bool _biometricEnabled = false;
@@ -99,8 +102,12 @@ class _LoginState extends State<Login> {
 
     // Add listener to email field after initialization
     txtEditEmail.addListener(_onEmailChanged);
-    _nrkFocusNode.addListener(() => setState(() {}));
-    _passwordFocusNode.addListener(() => setState(() {}));
+    _nrkFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _passwordFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
 
   void _onEmailChanged() async {
@@ -170,15 +177,10 @@ class _LoginState extends State<Login> {
         return;
       }
 
-      Position position = await Geolocator.getCurrentPosition(
+      // Meminta GPS aktif untuk memverifikasi lokasi
+      await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
-
-      if (mounted) {
-        setState(() {
-          _currentPosition = position;
-        });
-      }
     } catch (e) {
       print('Error getting location: $e');
     }
@@ -229,7 +231,7 @@ class _LoginState extends State<Login> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
+                  color: Colors.red.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
@@ -300,7 +302,7 @@ class _LoginState extends State<Login> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Untuk mereset perangkat, silakan hubungi Kantor Pusat Bank.',
+                        'Ajukan reset device untuk mengganti perangkat Anda.',
                         style: TextStyle(
                           fontSize: 13,
                           color: Colors.grey[800],
@@ -314,26 +316,69 @@ class _LoginState extends State<Login> {
             ],
           ),
           actions: [
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color.fromRGBO(1, 101, 65, 1),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+            Column(
+              children: [
+                // Reset Device Button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop(); // Close dialog
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ResetDevicePage(
+                            initialNrk: txtEditEmail.text.trim(),
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(
+                      Icons.phone_android,
+                      size: 20,
+                      color: Colors.white,
+                    ),
+                    label: const Text(
+                      'Reset Device',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color.fromRGBO(1, 101, 65, 1),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
                   ),
                 ),
-                child: const Text(
-                  'Mengerti',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
+                const SizedBox(height: 8),
+                // Close Button
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey[700],
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: BorderSide(color: Colors.grey[400]!),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'Tutup',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
           ],
         );
@@ -487,6 +532,49 @@ class _LoginState extends State<Login> {
     }
   }
 
+  /// Register FCM token for push notifications after successful login
+  Future<void> _registerFcmToken(SharedPreferences prefs) async {
+    try {
+      final npp = prefs.getString('npp') ?? '';
+      if (npp.isEmpty) {
+        print('FCM Registration skipped: NPP not found');
+        return;
+      }
+
+      // Get FCM token
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+      if (fcmToken == null) {
+        print('FCM Registration skipped: FCM token is null');
+        return;
+      }
+
+      // Get device ID
+      final deviceId = await DeviceInfoService().getDeviceId();
+
+      print('=== Registering FCM Token ===');
+      print('NPP: $npp');
+      print('FCM Token: ${fcmToken.substring(0, 20)}...');
+      print('Device ID: $deviceId');
+
+      // Register FCM token via NotificationBloc
+      if (mounted) {
+        context.read<NotificationBloc>().add(RegisterFcmToken(
+              npp: npp,
+              fcmToken: fcmToken,
+              deviceId: deviceId,
+            ));
+        print('FCM token registration event dispatched');
+      }
+
+      // Subscribe to 'all' topic for broadcast notifications
+      await FirebaseMessaging.instance.subscribeToTopic('all');
+      print('Subscribed to "all" topic for broadcasts');
+    } catch (e) {
+      // Don't block login if FCM registration fails
+      print('FCM Registration error (non-blocking): $e');
+    }
+  }
+
   Future<void> _handleSuccessfulLogin() async {
     final email = txtEditEmail.text;
     final password = txtEditPwd.text;
@@ -614,6 +702,9 @@ class _LoginState extends State<Login> {
 
     // Initialize session manager for new login
     SessionManager.initializeSession();
+
+    // Register FCM token for push notifications
+    await _registerFcmToken(prefs);
 
     // Navigate to main layout
     if (mounted) {
@@ -949,7 +1040,7 @@ class _LoginState extends State<Login> {
                                           boxShadow: [
                                             BoxShadow(
                                               color:
-                                                  Colors.black.withOpacity(0.1),
+                                                  Colors.black.withValues(alpha: 0.1),
                                               spreadRadius: 5,
                                               blurRadius: 15,
                                               offset: const Offset(0, 3),
@@ -1184,7 +1275,7 @@ class _LoginState extends State<Login> {
                                             boxShadow: [
                                               BoxShadow(
                                                 color: Colors.black
-                                                    .withOpacity(0.1),
+                                                    .withValues(alpha: 0.1),
                                                 spreadRadius: 5,
                                                 blurRadius: 15,
                                                 offset: const Offset(0, 3),

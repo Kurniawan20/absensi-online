@@ -69,46 +69,100 @@ class NotificationPreferencesUpdated extends NotificationState {
 }
 
 class NotificationItem {
-  final String id;
-  final String title;
-  final String message;
+  final int id;
+  final String npp;
   final String type;
-  final DateTime timestamp;
+  final String title;
+  final String body;
   final bool isRead;
+  final DateTime? readAt;
+  final DateTime createdAt;
   final Map<String, dynamic>? data;
 
   NotificationItem({
     required this.id,
-    required this.title,
-    required this.message,
+    required this.npp,
     required this.type,
-    required this.timestamp,
+    required this.title,
+    required this.body,
     required this.isRead,
+    this.readAt,
+    required this.createdAt,
     this.data,
   });
 
+  /// Getter for backward compatibility (message -> body)
+  String get message => body;
+
+  /// Getter for backward compatibility (timestamp -> createdAt)
+  DateTime get timestamp => createdAt;
+
   factory NotificationItem.fromJson(Map<String, dynamic> json) {
+    // Parse data field - can be Map, List, or null
+    Map<String, dynamic>? dataField;
+    if (json['data'] is Map<String, dynamic>) {
+      dataField = json['data'] as Map<String, dynamic>;
+    } else if (json['data'] is Map) {
+      dataField = Map<String, dynamic>.from(json['data'] as Map);
+    }
+    // If it's a List or other type, leave it as null
+
     return NotificationItem(
-      id: json['id'],
-      title: json['title'],
-      message: json['message'],
-      type: json['type'],
-      timestamp: DateTime.parse(json['timestamp']),
-      isRead: json['isRead'] ?? false,
-      data: json['data'],
+      id: json['id'] is int ? json['id'] : int.tryParse(json['id'].toString()) ?? 0,
+      npp: json['npp']?.toString() ?? '',
+      type: json['type']?.toString() ?? 'general',
+      title: json['title']?.toString() ?? '',
+      body: json['body']?.toString() ?? json['message']?.toString() ?? '',
+      isRead: json['is_read'] == true || json['is_read'] == 1 || json['isRead'] == true,
+      readAt: json['read_at'] != null ? DateTime.tryParse(json['read_at'].toString()) : null,
+      createdAt: _parseDateTime(json['created_at']) ?? _parseDateTime(json['timestamp']) ?? DateTime.now(),
+      data: dataField,
     );
+  }
+
+  static DateTime? _parseDateTime(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    return null;
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'title': title,
-      'message': message,
+      'npp': npp,
       'type': type,
-      'timestamp': timestamp.toIso8601String(),
-      'isRead': isRead,
+      'title': title,
+      'body': body,
+      'is_read': isRead,
+      'read_at': readAt?.toIso8601String(),
+      'created_at': createdAt.toIso8601String(),
       'data': data,
     };
+  }
+
+  NotificationItem copyWith({
+    int? id,
+    String? npp,
+    String? type,
+    String? title,
+    String? body,
+    bool? isRead,
+    DateTime? readAt,
+    DateTime? createdAt,
+    Map<String, dynamic>? data,
+  }) {
+    return NotificationItem(
+      id: id ?? this.id,
+      npp: npp ?? this.npp,
+      type: type ?? this.type,
+      title: title ?? this.title,
+      body: body ?? this.body,
+      isRead: isRead ?? this.isRead,
+      readAt: readAt ?? this.readAt,
+      createdAt: createdAt ?? this.createdAt,
+      data: data ?? this.data,
+    );
   }
 }
 

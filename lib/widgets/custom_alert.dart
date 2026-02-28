@@ -10,7 +10,7 @@ class CustomAlert extends StatelessWidget {
   final Color? iconColor;
 
   const CustomAlert({
-    Key? key,
+    super.key,
     required this.title,
     required this.message,
     this.buttonText = 'Oke',
@@ -18,14 +18,11 @@ class CustomAlert extends StatelessWidget {
     this.buttonColor,
     this.icon,
     this.iconColor,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
     final effectiveIconColor = iconColor ?? const Color.fromRGBO(1, 101, 65, 1);
-    final isSuccess =
-        effectiveIconColor == const Color.fromRGBO(1, 101, 65, 1) ||
-            effectiveIconColor == Colors.green;
     final isError = effectiveIconColor == Colors.red;
 
     return Dialog(
@@ -44,11 +41,11 @@ class CustomAlert extends StatelessWidget {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: effectiveIconColor.withOpacity(0.1),
+                  color: effectiveIconColor.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: effectiveIconColor.withOpacity(0.2),
+                      color: effectiveIconColor.withValues(alpha: 0.2),
                       blurRadius: 20,
                       spreadRadius: 5,
                     ),
@@ -97,7 +94,7 @@ class CustomAlert extends StatelessWidget {
                   elevation: 2,
                   shadowColor:
                       (buttonColor ?? const Color.fromRGBO(1, 101, 65, 1))
-                          .withOpacity(0.4),
+                          .withValues(alpha: 0.4),
                 ),
                 child: Text(
                   buttonText,
@@ -120,14 +117,14 @@ class CustomLoadingAlert extends StatelessWidget {
   final String message;
 
   const CustomLoadingAlert({
-    Key? key,
+    super.key,
     required this.message,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async => false,
+    return PopScope(
+      canPop: false,
       child: Dialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(
@@ -196,7 +193,7 @@ class CustomConfirmAlert extends StatelessWidget {
   final IconData? icon;
 
   const CustomConfirmAlert({
-    Key? key,
+    super.key,
     required this.title,
     required this.message,
     this.confirmText = 'Ya',
@@ -204,7 +201,7 @@ class CustomConfirmAlert extends StatelessWidget {
     required this.onConfirm,
     this.confirmButtonColor,
     this.icon,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -227,7 +224,7 @@ class CustomConfirmAlert extends StatelessWidget {
                 width: 70,
                 height: 70,
                 decoration: BoxDecoration(
-                  color: effectiveColor.withOpacity(0.1),
+                  color: effectiveColor.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -301,7 +298,7 @@ class CustomConfirmAlert extends StatelessWidget {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         elevation: 2,
-                        shadowColor: effectiveColor.withOpacity(0.4),
+                        shadowColor: effectiveColor.withValues(alpha: 0.4),
                       ),
                       child: Text(
                         confirmText,
@@ -331,12 +328,12 @@ class SuccessAlert extends StatelessWidget {
   final VoidCallback? onPressed;
 
   const SuccessAlert({
-    Key? key,
+    super.key,
     this.title = 'Berhasil!',
     required this.message,
     this.buttonText = 'Oke',
     this.onPressed,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -360,12 +357,12 @@ class ErrorAlert extends StatelessWidget {
   final VoidCallback? onPressed;
 
   const ErrorAlert({
-    Key? key,
+    super.key,
     this.title = 'Gagal!',
     required this.message,
     this.buttonText = 'Oke',
     this.onPressed,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -389,12 +386,12 @@ class WarningAlert extends StatelessWidget {
   final VoidCallback? onPressed;
 
   const WarningAlert({
-    Key? key,
+    super.key,
     this.title = 'Perhatian!',
     required this.message,
     this.buttonText = 'Oke',
     this.onPressed,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
-import 'package:intl/intl.dart';
 import './announcement_detail_page.dart';
 
 class AnnouncementListPage extends StatefulWidget {
-  const AnnouncementListPage({Key? key}) : super(key: key);
+  const AnnouncementListPage({super.key});
 
   @override
-  _AnnouncementListPageState createState() => _AnnouncementListPageState();
+  State<AnnouncementListPage> createState() => _AnnouncementListPageState();
 }
 
 class _AnnouncementListPageState extends State<AnnouncementListPage> {

@@ -9,12 +9,12 @@ class NotificationList extends StatelessWidget {
   final Function(NotificationItem) onNotificationDismiss;
 
   const NotificationList({
-    Key? key,
+    super.key,
     required this.notifications,
     required this.scrollController,
     required this.onNotificationTap,
     required this.onNotificationDismiss,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +34,7 @@ class NotificationList extends StatelessWidget {
           children: [
             if (showDate) _buildDateHeader(notification.timestamp, context),
             Dismissible(
-              key: Key(notification.id),
+              key: Key(notification.id.toString()),
               direction: DismissDirection.endToStart,
               background: Container(
                 alignment: Alignment.centerRight,
@@ -74,10 +74,10 @@ class NotificationList extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: notification.isRead ? null : Colors.blue.withOpacity(0.05),
+          color: notification.isRead ? null : Colors.blue.withValues(alpha: 0.05),
           border: Border(
             bottom: BorderSide(
-              color: Colors.grey.withOpacity(0.2),
+              color: Colors.grey.withValues(alpha: 0.2),
             ),
           ),
         ),
@@ -161,7 +161,7 @@ class NotificationList extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: iconColor.withOpacity(0.1),
+        color: iconColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Icon(

@@ -9,12 +9,12 @@ class CachedProfileImage extends StatelessWidget {
   final Color? backgroundColor;
 
   const CachedProfileImage({
-    Key? key,
+    super.key,
     this.imageUrl,
     this.size = 48,
     this.fallbackInitials,
     this.backgroundColor,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -94,13 +94,13 @@ class CachedImageWidget extends StatelessWidget {
   final BorderRadius? borderRadius;
 
   const CachedImageWidget({
-    Key? key,
+    super.key,
     required this.imageUrl,
     this.width,
     this.height,
     this.fit = BoxFit.cover,
     this.borderRadius,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

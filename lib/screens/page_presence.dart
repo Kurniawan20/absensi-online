@@ -1,28 +1,15 @@
 import 'dart:math' show min;
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter/gestures.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
-import 'package:monitoring_project/screens/Apis.dart';
+import 'package:monitoring_project/constants/api_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import './page_login.dart';
-import './home_page.dart';
-import './page_rekap_absensi.dart';
-import './page_profile.dart';
-import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platform_interface.dart';
-import 'package:quickalert/quickalert.dart';
-import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import '../widgets/custom_alert.dart';
 import '../widgets/security_alert.dart';
@@ -30,34 +17,22 @@ import '../services/attendance_service.dart';
 import '../services/security_service.dart';
 import '../services/attendance_reminder_service.dart';
 import '../utils/storage_config.dart';
-import '../constants/office_location_config.dart';
+import '../constants/office_location_config.dart' hide OfficeLocation;
 import '../constants/attendance_response_codes.dart';
+import '../models/office_location.dart';
 
 void main() => runApp(const Presence());
 
 class Presence extends StatefulWidget {
-  const Presence({Key? key}) : super(key: key);
+  const Presence({super.key});
 
   @override
-  _PresenceState createState() => _PresenceState();
+  State<Presence> createState() => _PresenceState();
 }
 
 class _PresenceState extends State<Presence> {
-  bool _isMockLocation = false;
-  bool? _jailbroken;
-  bool? _developerMode;
-
   SharedPreferences? preferences;
   Timer? timer;
-  double latKantor = 0;
-  double longKantor = 0;
-  double radius = 0;
-  double zoomVar = 17;
-
-  double latKantor2 = 0;
-  double longKantor2 = 0;
-  double radius2 = 0;
-  bool useSecondLocation = false;
 
   bool isJailBroken = false;
   bool canMockLocation = false;
@@ -65,6 +40,16 @@ class _PresenceState extends State<Presence> {
   bool isOnExternalStorage = false;
   bool isSafeDevice = false;
   bool isDevelopmentModeEnable = false;
+
+  // Office locations (multiple)
+  List<OfficeLocation> officeLocations = [];
+
+  // Index lokasi kantor yang sedang ditampilkan di map
+  int _currentLocationIndex = 0;
+
+  // Zoom level untuk map
+  double zoomVar = 17.0;
+
   LatLng currentLatLng = LatLng(
     OfficeLocationConfig.defaultLatitude,
     OfficeLocationConfig.defaultLongitude,
@@ -86,6 +71,7 @@ class _PresenceState extends State<Presence> {
   final _securityService = SecurityService();
   final _reminderService = AttendanceReminderService();
 
+  @override
   void initState() {
     super.initState();
     initializeDateFormatting('id', null);
@@ -124,29 +110,30 @@ class _PresenceState extends State<Presence> {
   }
 
   Future<void> initializePreference() async {
-    this.preferences = await SharedPreferences.getInstance();
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
-    latKantor = prefs.getDouble("lat_kantor")!;
-    longKantor = prefs.getDouble("long_kantor")!;
-    radius = prefs.getDouble("radius")!;
+      // Load locations dari SharedPreferences
+      final locationsJson = prefs.getString('office_locations');
+      if (locationsJson != null && locationsJson.isNotEmpty) {
+        officeLocations = OfficeLocation.fromJsonString(locationsJson);
+        print('Loaded ${officeLocations.length} office location(s):');
+        for (var loc in officeLocations) {
+          print(
+              '  - ${loc.nama}: (${loc.latitude}, ${loc.longitude}), radius: ${loc.radius}m');
+        }
+      } else {
+        print('No office locations found in SharedPreferences');
+      }
 
-    String? kodeKantor = prefs.getString("kode_kantor");
-    final secondaryLocation = OfficeLocationConfig.getSecondaryLocation(
-      kodeKantor,
-    );
-    if (secondaryLocation != null) {
-      latKantor2 = secondaryLocation.latitude;
-      longKantor2 = secondaryLocation.longitude;
-      radius2 = radius;
-      useSecondLocation = true;
+      if (!mounted) return;
+      setState(() {});
+    } catch (e) {
+      print('Error initializing preferences: $e');
     }
-
-    if (!mounted) return;
-    setState(() {});
   }
 
-  Completer<GoogleMapController> _controller = Completer();
+  final Completer<GoogleMapController> _controller = Completer();
 
   Future<Position> getUserCurrentLocation() async {
     bool serviceEnabled;
@@ -194,8 +181,7 @@ class _PresenceState extends State<Presence> {
   }
 
   late GoogleMapController mapController;
-  GeolocatorPlatform _geo = new PresenceGeo();
-  bool _inRadius = true;
+  final bool _inRadius = true;
 
   void _checkRadius(String type) async {
     try {
@@ -250,24 +236,33 @@ class _PresenceState extends State<Presence> {
         return;
       }
 
-      double distanceInMeters = Geolocator.distanceBetween(
-        position.latitude,
-        position.longitude,
-        latKantor,
-        longKantor,
-      );
+      // Calculate distance to all locations and find the closest one
+      double minDistance = double.infinity;
 
-      if (useSecondLocation) {
-        double distanceToSecondOffice = Geolocator.distanceBetween(
+      for (var location in officeLocations) {
+        final distance = Geolocator.distanceBetween(
           position.latitude,
           position.longitude,
-          latKantor2,
-          longKantor2,
+          location.latitude,
+          location.longitude,
         );
-        distanceInMeters = min(distanceInMeters, distanceToSecondOffice);
+        if (distance < minDistance) {
+          minDistance = distance;
+        }
       }
 
-      if (distanceInMeters <= radius) {
+      // Check if within any office radius
+      final isWithinRadius = officeLocations.any((location) {
+        final distance = Geolocator.distanceBetween(
+          position.latitude,
+          position.longitude,
+          location.latitude,
+          location.longitude,
+        );
+        return distance <= location.radius;
+      });
+
+      if (isWithinRadius) {
         _absen(position.latitude, position.longitude, type);
       } else {
         Navigator.of(context, rootNavigator: true).pop();
@@ -287,24 +282,8 @@ class _PresenceState extends State<Presence> {
     }
   }
 
-  void _fetchData(BuildContext context, [bool mounted = true]) async {
+  void _fetchData(BuildContext context) async {
     // Removed duplicate loading dialog since it's now shown in _checkRadius
-  }
-
-  void _fetchDialog(
-    BuildContext context,
-    String message, [
-    bool mounted = true,
-  ]) async {
-    _showSuccessBottomSheet(context, message);
-  }
-
-  void _fetchDialogWarning(
-    BuildContext context,
-    String message, [
-    bool mounted = true,
-  ]) async {
-    _showErrorBottomSheet(context, 'Peringatan', message);
   }
 
   void _showSuccessBottomSheet(BuildContext context, String message) {
@@ -312,10 +291,17 @@ class _PresenceState extends State<Presence> {
       context: context,
       backgroundColor: Colors.transparent,
       isDismissible: true,
-      builder: (context) {
+      builder: (bottomSheetContext) {
+        // Auto-dismiss setelah 2 detik
         Future.delayed(const Duration(seconds: 2), () {
-          if (Navigator.of(context).canPop()) {
-            Navigator.of(context).pop();
+          try {
+            if (mounted &&
+                Navigator.of(bottomSheetContext, rootNavigator: true)
+                    .canPop()) {
+              Navigator.of(bottomSheetContext, rootNavigator: true).pop();
+            }
+          } catch (_) {
+            // Bottom sheet sudah di-dismiss manual oleh user
           }
         });
 
@@ -344,7 +330,7 @@ class _PresenceState extends State<Presence> {
                 tween: Tween<double>(begin: 0.0, end: 1.0),
                 duration: const Duration(milliseconds: 800),
                 curve: Curves.elasticOut,
-                builder: (context, value, child) {
+                builder: (animContext, value, child) {
                   return Transform.scale(scale: value, child: child);
                 },
                 child: Container(
@@ -385,7 +371,7 @@ class _PresenceState extends State<Presence> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () => Navigator.of(bottomSheetContext).pop(),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color.fromRGBO(1, 101, 65, 1),
                     foregroundColor: Colors.white,
@@ -418,13 +404,13 @@ class _PresenceState extends State<Presence> {
   }) {
     final effectiveColor = color ?? Colors.red.shade600;
     final effectiveIcon = icon ?? Icons.warning_amber_rounded;
-    final backgroundColor = color?.withOpacity(0.1) ?? Colors.red.shade50;
+    final backgroundColor = color?.withValues(alpha: 0.1) ?? Colors.red.shade50;
 
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isDismissible: true,
-      builder: (context) => Container(
+      builder: (bottomSheetContext) => Container(
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.only(
@@ -449,7 +435,7 @@ class _PresenceState extends State<Presence> {
               tween: Tween<double>(begin: 0.0, end: 1.0),
               duration: const Duration(milliseconds: 800),
               curve: Curves.elasticOut,
-              builder: (context, value, child) {
+              builder: (animContext, value, child) {
                 return Transform.scale(scale: value, child: child);
               },
               child: Container(
@@ -486,7 +472,7 @@ class _PresenceState extends State<Presence> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () => Navigator.of(bottomSheetContext).pop(),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: effectiveColor,
                   foregroundColor: Colors.white,
@@ -509,141 +495,18 @@ class _PresenceState extends State<Presence> {
     );
   }
 
-  void _konfirmasiAbsenPulang(
-    BuildContext context,
-    String message, [
-    bool mounted = true,
-  ]) async {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
-          ),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Drag handle
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 24),
-            // Icon
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: const Color.fromRGBO(1, 101, 65, 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                FluentIcons.sign_out_24_regular,
-                color: Color.fromRGBO(1, 101, 65, 1),
-                size: 32,
-              ),
-            ),
-            const SizedBox(height: 20),
-            // Title
-            const Text(
-              'Konfirmasi Absen Pulang',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'Poppins',
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Apakah Anda yakin akan melakukan absen pulang?',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-                fontFamily: 'Poppins',
-              ),
-            ),
-            const SizedBox(height: 24),
-            // Action buttons
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.grey[600],
-                      side: BorderSide(color: Colors.grey[300]!),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Batal',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context); // Close confirmation
-                      _fetchDialog(context, 'Sedang memproses absen pulang...');
-                      _checkRadius('absenpulang');
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color.fromRGBO(1, 101, 65, 1),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: const Text(
-                      'Ya, Absen Pulang',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<String> _absen(double lat, double long, String absenType) async {
     final prefs = await SharedPreferences.getInstance();
-    final branch_id = prefs.getString("kode_kantor").toString();
+    final branchId = prefs.getString("kode_kantor").toString();
     final nrk = prefs.getString("npp");
-    final _deviceId = prefs.getString("device_id");
+    final deviceId = prefs.getString("device_id");
 
     print('=== Starting attendance process ===');
     print('Type: $absenType');
     print('Location: lat=$lat, long=$long');
-    print('Branch ID: $branch_id');
+    print('Branch ID: $branchId');
     print('NRK: $nrk');
-    print('Device ID: $_deviceId');
+    print('Device ID: $deviceId');
 
     try {
       final storage = StorageConfig.secureStorage;
@@ -666,6 +529,7 @@ class _PresenceState extends State<Presence> {
 
         // Redirect to login
         Future.delayed(Duration(seconds: 2), () {
+          if (!mounted) return;
           Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (context) => Login()),
@@ -676,240 +540,193 @@ class _PresenceState extends State<Presence> {
         return "token expired";
       }
 
-      print('\n=== Making check session request ===');
-      print('URL: ${ApiConstants.BASE_URL}/checksession');
-      print(
-        'Headers: Authorization: Bearer ${token.substring(0, min(10, token.length))}...',
-      );
-      print('Body: {"npp": "$nrk", "deviceId": "$_deviceId"}');
-
-      final checkSessionResult = await http
-          .post(
-            Uri.parse(ApiConstants.BASE_URL + "/checksession"),
-            headers: <String, String>{
-              'Content-Type': 'application/json; charset=UTF-8',
-              'Authorization': 'Bearer $token',
-            },
-            body: jsonEncode(<String, String>{
-              'npp': nrk.toString(),
-              "deviceId": _deviceId.toString(),
-            }),
-          )
-          .timeout(const Duration(seconds: 20));
-
-      print('Check session response status: ${checkSessionResult.statusCode}');
-      print('Check session response body: ${checkSessionResult.body}');
-
-      if (checkSessionResult.statusCode != 200) {
-        print(
-          'Check session failed with status: ${checkSessionResult.statusCode}',
+      // Check if user is within office radius
+      if (!_inRadius) {
+        Navigator.of(context, rootNavigator: true).pop(context);
+        _showErrorBottomSheet(
+          context,
+          'Lokasi Invalid',
+          'Anda berada diluar radius kantor!',
         );
-        throw Exception('Check session failed');
+        return "absen gagal";
       }
 
-      final checkSessionData = jsonDecode(
-        checkSessionResult.body.toString().replaceAll('""', ""),
-      );
+      // Proceed with attendance request directly (without checksession)
+      try {
+        print('\n=== Making attendance request ===');
+        print('URL: ${ApiConstants.baseUrl}/$absenType');
+        print(
+          'Headers: Authorization: Bearer ${token.substring(0, min(10, token.length))}...',
+        );
+        print('Body: {');
+        print('  "npp": "$nrk",');
+        print('  "latitude": "$lat",');
+        print('  "longitude": "$long",');
+        print('  "branch_id": "$branchId"');
+        print('}');
 
-      if (checkSessionData['rcode'] == "00") {
-        // Verify token is still valid after check session
-        token = await storage.read(key: 'auth_token');
-        if (token == null) {
-          throw Exception('Token lost after check session');
-        }
-        if (this._inRadius) {
-          try {
-            print('\n=== Making attendance request ===');
-            print('URL: ${ApiConstants.BASE_URL}/$absenType');
-            print(
-              'Headers: Authorization: Bearer ${token.substring(0, min(10, token.length))}...',
-            );
-            print('Body: {');
-            print('  "npp": "$nrk",');
-            print('  "latitude": "$lat",');
-            print('  "longitude": "$long",');
-            print('  "branch_id": "$branch_id"');
-            print('}');
+        final attendanceUrl = absenType == 'absenmasuk'
+            ? ApiConstants.attendanceCheckIn
+            : ApiConstants.attendanceCheckOut;
 
-            final getResult = await http
-                .post(
-                  Uri.parse(ApiConstants.BASE_URL + "/" + absenType),
-                  headers: <String, String>{
-                    'Content-Type': 'application/json; charset=UTF-8',
-                    'Authorization': 'Bearer $token',
-                  },
-                  body: jsonEncode(<String, String>{
-                    'npp': nrk.toString(),
-                    'latitude': lat.toString(),
-                    'longitude': long.toString(),
-                    'branch_id': branch_id,
-                  }),
-                )
-                .timeout(const Duration(seconds: 20));
+        final getResult = await http
+            .post(
+              Uri.parse(attendanceUrl),
+              headers: <String, String>{
+                'Content-Type': 'application/json; charset=UTF-8',
+                'Authorization': 'Bearer $token',
+              },
+              body: jsonEncode(<String, String>{
+                'npp': nrk.toString(),
+                'latitude': lat.toString(),
+                'longitude': long.toString(),
+                'branch_id': branchId,
+              }),
+            )
+            .timeout(const Duration(seconds: 20));
 
-            print('Attendance response status: ${getResult.statusCode}');
-            print('Attendance response body: ${getResult.body}');
+        print('Attendance response status: ${getResult.statusCode}');
+        print('Attendance response body: ${getResult.body}');
 
-            String result = getResult.body.toString().replaceAll('""', "");
-            final responseData = jsonDecode(result);
-            final String rcode = responseData['rcode'] ?? '';
-            final String? apiMessage = responseData['message'];
+        String result = getResult.body.toString().replaceAll('""', "");
+        final responseData = jsonDecode(result);
+        final String rcode = responseData['rcode'] ?? '';
+        final String? apiMessage = responseData['message'];
 
-            // Get response based on type (check-in or check-out)
-            // For success (rcode == '00'), use our custom messages instead of API messages
-            final AttendanceResponse response = absenType == 'absenmasuk'
-                ? AttendanceResponseCodes.getCheckInResponse(
-                    rcode,
-                    rcode == '00' ? null : apiMessage,
-                  )
-                : AttendanceResponseCodes.getCheckOutResponse(
-                    rcode,
-                    rcode == '00' ? null : apiMessage,
-                  );
+        // Extract is_late from API response data
+        final Map<String, dynamic>? apiData = responseData['data'];
+        final bool isLateFromApi =
+            apiData?['is_late'] == true || apiData?['is_late'] == 1;
+        final String? batasJamMasuk = apiData?['batas_jam_masuk'];
 
-            if (response.isSuccess) {
-              // Update attendance time immediately after successful check-in/out
-              final now = DateTime.now();
-              final currentTime =
-                  "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
-              await _attendanceService.updateAttendanceTime(
-                absenType,
-                currentTime,
+        // Get response based on type (check-in or check-out)
+        // For success (rcode == '00'), use our custom messages instead of API messages
+        final AttendanceResponse response = absenType == 'absenmasuk'
+            ? AttendanceResponseCodes.getCheckInResponse(
+                rcode,
+                rcode == '00' ? null : apiMessage,
+              )
+            : AttendanceResponseCodes.getCheckOutResponse(
+                rcode,
+                rcode == '00' ? null : apiMessage,
               );
 
-              // Update local state
-              setState(() {
-                if (absenType == 'absenmasuk') {
-                  _jamMasuk = currentTime;
-                } else {
-                  _jamPulang = currentTime;
-                }
-              });
+        if (response.isSuccess) {
+          // Update attendance time immediately after successful check-in/out
+          final now = DateTime.now();
+          final currentTime =
+              "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+          await _attendanceService.updateAttendanceTime(
+            absenType,
+            currentTime,
+          );
 
-              // Handle reminder notifications (wrapped in try-catch to not break success flow)
-              try {
-                if (absenType == 'absenmasuk') {
-                  // Schedule check-out reminder after successful check-in
-                  await _reminderService.scheduleCheckOutReminder(
-                    checkInTime: now,
-                    workHours: 8, // 8 jam kerja
-                  );
-                  print('✅ Check-out reminder scheduled');
-                } else if (absenType == 'absenpulang') {
-                  // Cancel reminders after successful check-out
-                  await _reminderService.cancelCheckOutReminders();
-                  print('✅ Check-out reminders cancelled');
-                }
-              } catch (reminderError) {
-                // Log but don't fail the attendance flow
-                print(
-                  '⚠️ Reminder scheduling failed (non-critical): $reminderError',
-                );
-              }
-
-              // Close loading modal first
-              Navigator.of(context, rootNavigator: true).pop(context);
-
-              // Show success bottom sheet with late status for check-in
-              final successTitle = absenType == 'absenmasuk' && _isLate()
-                  ? 'Terlambat'
-                  : response.title;
-              final successMessage = absenType == 'absenmasuk'
-                  ? _getCheckInMessage()
-                  : response.message;
-              _showSuccessBottomSheet(
-                context,
-                '$successTitle\n$successMessage',
-              );
-
-              // Trigger attendance update notification
-              _attendanceService.notifyListeners();
-
-              // Refresh data from API after successful check-in/out
-              _loadAttendanceData();
-
-              return "absen berhasil";
+          // Update local state
+          setState(() {
+            if (absenType == 'absenmasuk') {
+              _jamMasuk = currentTime;
             } else {
-              // Handle error responses
-              Navigator.of(context, rootNavigator: true).pop(context);
-
-              IconData errorIcon;
-              Color errorColor;
-
-              switch (response.icon) {
-                case AttendanceIcon.tooEarly:
-                  errorIcon = Icons.access_time_rounded;
-                  errorColor = Colors.orange;
-                  break;
-                case AttendanceIcon.duplicate:
-                case AttendanceIcon.warning:
-                  errorIcon = Icons.warning_amber_rounded;
-                  errorColor = Colors.orange;
-                  break;
-                default:
-                  errorIcon = Icons.error_outline;
-                  errorColor = Colors.red;
-              }
-
-              _showErrorBottomSheet(
-                context,
-                response.title,
-                response.message,
-                icon: errorIcon,
-                color: errorColor,
-              );
-              return "absen gagal";
+              _jamPulang = currentTime;
             }
-          } on TimeoutException catch (e) {
-            print('\n=== Attendance request timeout ===');
-            print('Error: $e');
-            Navigator.of(context, rootNavigator: true).pop(context);
-            _showErrorBottomSheet(
-              context,
-              'Timeout',
-              'Koneksi timeout, silahkan coba lagi!',
+          });
+
+          // Handle reminder notifications (wrapped in try-catch to not break success flow)
+          try {
+            if (absenType == 'absenmasuk') {
+              // Schedule check-out reminder after successful check-in
+              await _reminderService.scheduleCheckOutReminder(
+                checkInTime: now,
+                workHours: 8, // 8 jam kerja
+              );
+              print('✅ Check-out reminder scheduled');
+            } else if (absenType == 'absenpulang') {
+              // Cancel reminders after successful check-out
+              await _reminderService.cancelCheckOutReminders();
+              print('✅ Check-out reminders cancelled');
+            }
+          } catch (reminderError) {
+            // Log but don't fail the attendance flow
+            print(
+              '⚠️ Reminder scheduling failed (non-critical): $reminderError',
             );
-            return "absen gagal";
-          } catch (e) {
-            print('\n=== Attendance request error ===');
-            print('Error: $e');
-            Navigator.of(context, rootNavigator: true).pop(context);
-            _showErrorBottomSheet(
-              context,
-              'Error',
-              'Terjadi kesalahan, silahkan coba lagi!',
-            );
-            return "absen gagal";
           }
-        } else {
+
+          // Close loading modal first
           Navigator.of(context, rootNavigator: true).pop(context);
+
+          // Show success bottom sheet with late status from API
+          final successTitle = absenType == 'absenmasuk' && isLateFromApi
+              ? 'Terlambat'
+              : response.title;
+          final successMessage = absenType == 'absenmasuk'
+              ? _getCheckInMessage(isLateFromApi, batasJamMasuk)
+              : response.message;
+          _showSuccessBottomSheet(
+            context,
+            '$successTitle\n$successMessage',
+          );
+
+          // Trigger attendance update notification
+          _attendanceService.notifyListeners();
+
+          // Refresh data from API after successful check-in/out
+          _loadAttendanceData();
+
+          return "absen berhasil";
+        } else {
+          // Handle error responses
+          Navigator.of(context, rootNavigator: true).pop(context);
+
+          IconData errorIcon;
+          Color errorColor;
+
+          switch (response.icon) {
+            case AttendanceIcon.tooEarly:
+              errorIcon = Icons.access_time_rounded;
+              errorColor = Colors.orange;
+              break;
+            case AttendanceIcon.duplicate:
+            case AttendanceIcon.warning:
+              errorIcon = Icons.warning_amber_rounded;
+              errorColor = Colors.orange;
+              break;
+            default:
+              errorIcon = Icons.error_outline;
+              errorColor = Colors.red;
+          }
+
           _showErrorBottomSheet(
             context,
-            'Lokasi Invalid',
-            'Anda berada diluar radius kantor!',
+            response.title,
+            response.message,
+            icon: errorIcon,
+            color: errorColor,
           );
           return "absen gagal";
         }
-      } else {
-        String message = jsonDecode(
-          checkSessionResult.body.toString().replaceAll('""', ""),
-        )['message'];
+      } on TimeoutException catch (e) {
+        print('\n=== Attendance request timeout ===');
+        print('Error: $e');
         Navigator.of(context, rootNavigator: true).pop(context);
-        _showErrorBottomSheet(context, 'Warning', message);
+        _showErrorBottomSheet(
+          context,
+          'Timeout',
+          'Koneksi timeout, silahkan coba lagi!',
+        );
+        return "absen gagal";
+      } catch (e) {
+        print('\n=== Attendance request error ===');
+        print('Error: $e');
+        Navigator.of(context, rootNavigator: true).pop(context);
+        _showErrorBottomSheet(
+          context,
+          'Error',
+          'Terjadi kesalahan, silahkan coba lagi!',
+        );
         return "absen gagal";
       }
-    } on TimeoutException catch (e) {
-      print('\n=== Check session timeout ===');
-      print('Error: $e');
-      Navigator.of(context, rootNavigator: true).pop(context);
-      _showErrorBottomSheet(
-        context,
-        'Timeout',
-        'Koneksi timeout, silahkan coba lagi!',
-      );
-      return "absen gagal";
     } catch (e) {
-      print('\n=== Check session error ===');
+      print('\n=== Unexpected error ===');
       print('Error: $e');
       Navigator.of(context, rootNavigator: true).pop(context);
       _showErrorBottomSheet(
@@ -926,55 +743,18 @@ class _PresenceState extends State<Presence> {
     return weekday == DateTime.saturday || weekday == DateTime.sunday;
   }
 
-  bool _isLate() {
-    // Weekend exception: Don't count as late if it's weekend
-    if (_isWeekend()) {
-      return false; // Weekend attendance is always considered on time
-    }
-
-    // Define the standard start time
-    final standardStartTime = DateTime(
-      DateTime.now().year,
-      DateTime.now().month,
-      DateTime.now().day,
-      7,
-      45,
-      0, // 07:45 AM
-    );
-
-    final now = DateTime.now();
-    final currentTime = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      now.hour,
-      now.minute,
-    );
-
-    return currentTime.isAfter(standardStartTime);
-  }
-
-  String _getCheckInMessage() {
+  String _getCheckInMessage(bool isLate, String? batasJamMasuk) {
     // Weekend exception: Different message for weekend attendance
     if (_isWeekend()) {
       return 'Absensi weekend berhasil dicatat. Terima kasih atas kerja keras Anda!';
     }
 
-    if (_isLate()) {
-      return 'Anda terlambat melakukan absensi. Harap segera melakukan absensi dan memberikan keterangan keterlambatan.';
+    if (isLate) {
+      final batasInfo = batasJamMasuk != null ? ' (Batas: $batasJamMasuk)' : '';
+      return 'Anda terlambat melakukan absensi$batasInfo. Harap segera memberikan keterangan keterlambatan.';
     } else {
       return 'Absensi berhasil dilakukan tepat waktu. Selamat bekerja!';
     }
-  }
-
-  void _updateAttendanceTime(String type, String time) {
-    setState(() {
-      if (type == 'absenmasuk') {
-        _jamMasuk = time;
-      } else {
-        _jamPulang = time;
-      }
-    });
   }
 
   Future<void> _loadAttendanceData() async {
@@ -1105,10 +885,17 @@ class _PresenceState extends State<Presence> {
     }
   }
 
+  /// Navigasi ke lokasi kantor berikutnya (cyclic)
   Future<void> _zoomToOffice() async {
+    if (officeLocations.isEmpty) {
+      print('No office locations available to zoom to');
+      return;
+    }
+
     try {
       final GoogleMapController controller = await _controller.future;
-      final latLng = LatLng(latKantor, longKantor);
+      final location = officeLocations[_currentLocationIndex];
+      final latLng = LatLng(location.latitude, location.longitude);
 
       controller.animateCamera(
         CameraUpdate.newCameraPosition(
@@ -1118,6 +905,9 @@ class _PresenceState extends State<Presence> {
 
       setState(() {
         currentLatLng = latLng;
+        // Pindah ke lokasi berikutnya untuk tap selanjutnya
+        _currentLocationIndex =
+            (_currentLocationIndex + 1) % officeLocations.length;
       });
     } catch (e) {
       print('Error zooming to office: $e');
@@ -1147,7 +937,7 @@ class _PresenceState extends State<Presence> {
               end: Alignment.bottomRight,
               colors: [
                 Theme.of(context).primaryColor,
-                Theme.of(context).primaryColor.withOpacity(0.8),
+                Theme.of(context).primaryColor.withValues(alpha: 0.8),
               ],
             ),
           ),
@@ -1187,50 +977,36 @@ class _PresenceState extends State<Presence> {
                   onMapCreated: (GoogleMapController controller) {
                     _controller.complete(controller);
                   },
-                  circles: Set.from([
-                    Circle(
-                      circleId: CircleId("primary"),
-                      center: LatLng(latKantor, longKantor),
-                      radius: radius,
-                      fillColor: Color.fromRGBO(1, 101, 65, 0.2),
-                      strokeColor: Color.fromRGBO(1, 101, 65, 0.5),
-                      strokeWidth: 2,
-                    ),
-                    if (useSecondLocation)
-                      Circle(
-                        circleId: CircleId("secondary"),
-                        center: LatLng(latKantor2, longKantor2),
-                        radius: radius2,
-                        fillColor: Colors.green.withOpacity(0.2),
-                        strokeColor: Colors.green.withOpacity(0.4),
+                  circles: Set.from(
+                    officeLocations.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final location = entry.value;
+                      return Circle(
+                        circleId: CircleId('office_$index'),
+                        center: LatLng(location.latitude, location.longitude),
+                        radius: location.radius,
+                        fillColor: Color.fromRGBO(1, 101, 65, 0.2),
+                        strokeColor: Color.fromRGBO(1, 101, 65, 0.5),
                         strokeWidth: 2,
-                      ),
-                  ]),
-                  markers: Set.from([
-                    Marker(
-                      markerId: MarkerId("primary_office"),
-                      position: LatLng(latKantor, longKantor),
-                      infoWindow: InfoWindow(
-                        title: 'Kantor Utama',
-                        snippet: 'Radius: ${radius.toStringAsFixed(0)}m',
-                      ),
-                      icon: BitmapDescriptor.defaultMarkerWithHue(
-                        120.0, // Green hue
-                      ),
-                    ),
-                    if (useSecondLocation)
-                      Marker(
-                        markerId: MarkerId("secondary_office"),
-                        position: LatLng(latKantor2, longKantor2),
+                      );
+                    }).toList(),
+                  ),
+                  markers: Set.from(
+                    officeLocations.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final location = entry.value;
+                      return Marker(
+                        markerId: MarkerId('office_marker_$index'),
+                        position: LatLng(location.latitude, location.longitude),
                         infoWindow: InfoWindow(
-                          title: 'Kantor Alternatif',
-                          snippet: 'Radius: ${radius2.toStringAsFixed(0)}m',
+                          title: location.nama,
+                          snippet:
+                              '${location.alamat}\nRadius: ${location.radius.toStringAsFixed(0)}m',
                         ),
-                        icon: BitmapDescriptor.defaultMarkerWithHue(
-                          BitmapDescriptor.hueGreen,
-                        ),
-                      ),
-                  ]),
+                        icon: BitmapDescriptor.defaultMarkerWithHue(120.0),
+                      );
+                    }).toList(),
+                  ),
                 ),
 
                 // Location status badge
@@ -1244,31 +1020,26 @@ class _PresenceState extends State<Presence> {
 
                       final userPosition = snapshot.data!;
 
-                      // Calculate distance to primary office
-                      final distanceToPrimary = Geolocator.distanceBetween(
-                        userPosition.latitude,
-                        userPosition.longitude,
-                        latKantor,
-                        longKantor,
-                      );
+                      // Calculate distance to all locations and find the closest one
+                      double minDistance = double.infinity;
+                      OfficeLocation? closestLocation;
 
-                      // Calculate distance to secondary office (if exists)
-                      double minDistance = distanceToPrimary;
-                      if (useSecondLocation) {
-                        final distanceToSecondary = Geolocator.distanceBetween(
+                      for (var location in officeLocations) {
+                        final distance = Geolocator.distanceBetween(
                           userPosition.latitude,
                           userPosition.longitude,
-                          latKantor2,
-                          longKantor2,
+                          location.latitude,
+                          location.longitude,
                         );
-                        minDistance = min(
-                          distanceToPrimary,
-                          distanceToSecondary,
-                        );
+                        if (distance < minDistance) {
+                          minDistance = distance;
+                          closestLocation = location;
+                        }
                       }
 
                       // Check if user is within any office radius
-                      final bool isOutsideRadius = minDistance > radius;
+                      final bool isOutsideRadius = closestLocation == null ||
+                          minDistance > closestLocation.radius;
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1287,7 +1058,7 @@ class _PresenceState extends State<Presence> {
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.1),
+                                  color: Colors.black.withValues(alpha: 0.1),
                                   blurRadius: 8,
                                   offset: Offset(0, 2),
                                 ),
@@ -1345,7 +1116,7 @@ class _PresenceState extends State<Presence> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withValues(alpha: 0.1),
                           blurRadius: 8,
                           offset: Offset(0, 2),
                         ),
@@ -1358,6 +1129,25 @@ class _PresenceState extends State<Presence> {
                       color: Theme.of(context).primaryColor,
                     ),
                   ),
+                  // Tombol navigasi ke lokasi kantor berikutnya
+                  if (officeLocations.length > 1) ...[
+                    SizedBox(height: 4),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Color.fromRGBO(1, 101, 65, 0.9),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${_currentLocationIndex + 1}/${officeLocations.length}',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                   SizedBox(height: 8),
                   Container(
                     width: 40,
@@ -1367,7 +1157,7 @@ class _PresenceState extends State<Presence> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withValues(alpha: 0.1),
                           blurRadius: 8,
                           offset: Offset(0, 2),
                         ),
@@ -1577,7 +1367,7 @@ class _PresenceState extends State<Presence> {
                       borderRadius: BorderRadius.zero,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color: Colors.black.withValues(alpha: 0.05),
                           blurRadius: 1,
                           offset: Offset(0, -2),
                         ),
@@ -1646,7 +1436,7 @@ class _PresenceState extends State<Presence> {
                                 BoxShadow(
                                   color: Theme.of(
                                     context,
-                                  ).primaryColor.withOpacity(0.15),
+                                  ).primaryColor.withValues(alpha: 0.15),
                                   blurRadius: 8,
                                   offset: Offset(0, 4),
                                   spreadRadius: -2,
@@ -1665,12 +1455,12 @@ class _PresenceState extends State<Presence> {
                                     border: Border.all(
                                       color: Theme.of(
                                         context,
-                                      ).primaryColor.withOpacity(0.1),
+                                      ).primaryColor.withValues(alpha: 0.1),
                                       width: 1,
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withOpacity(0.03),
+                                        color: Colors.black.withValues(alpha: 0.03),
                                         blurRadius: 4,
                                         offset: Offset(0, 2),
                                       ),
@@ -1689,11 +1479,11 @@ class _PresenceState extends State<Presence> {
                                               colors: [
                                                 Theme.of(
                                                   context,
-                                                ).primaryColor.withOpacity(0.5),
+                                                ).primaryColor.withValues(alpha: 0.5),
                                                 Theme.of(context).primaryColor,
                                                 Theme.of(
                                                   context,
-                                                ).primaryColor.withOpacity(0.5),
+                                                ).primaryColor.withValues(alpha: 0.5),
                                               ],
                                               stops: [
                                                 value - 0.2,
@@ -1732,7 +1522,7 @@ class _PresenceState extends State<Presence> {
                                     borderRadius: BorderRadius.circular(35),
                                     color: Theme.of(
                                       context,
-                                    ).primaryColor.withOpacity(0.15),
+                                    ).primaryColor.withValues(alpha: 0.15),
                                   ),
                                 ),
 
@@ -1789,7 +1579,7 @@ class _PresenceState extends State<Presence> {
                                             BoxShadow(
                                               color: Theme.of(
                                                 context,
-                                              ).primaryColor.withOpacity(0.3),
+                                              ).primaryColor.withValues(alpha: 0.3),
                                               blurRadius: 8,
                                               offset: Offset(2, 2),
                                               spreadRadius: 1,
@@ -1862,12 +1652,12 @@ class _PresenceState extends State<Presence> {
                                     shape: BoxShape.circle,
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withOpacity(0.15),
+                                        color: Colors.black.withValues(alpha: 0.15),
                                         blurRadius: 6,
                                         offset: Offset(0, 2),
                                       ),
                                       BoxShadow(
-                                        color: Colors.black.withOpacity(0.1),
+                                        color: Colors.black.withValues(alpha: 0.1),
                                         blurRadius: 3,
                                         offset: Offset(0, 1),
                                       ),

@@ -6,18 +6,21 @@ import 'notification_state.dart';
 
 class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
   final NotificationRepository notificationRepository;
+  String? _currentNpp;
 
   NotificationBloc({required this.notificationRepository})
       : super(NotificationInitial()) {
     on<InitializeNotifications>(_onInitializeNotifications);
     on<LoadNotifications>(_onLoadNotifications);
+    on<GetUnreadCount>(_onGetUnreadCount);
     on<MarkNotificationAsRead>(_onMarkNotificationAsRead);
     on<MarkAllNotificationsAsRead>(_onMarkAllNotificationsAsRead);
     on<DeleteNotification>(_onDeleteNotification);
-    on<ClearAllNotifications>(_onClearAllNotifications);
     on<UpdateNotificationPreferences>(_onUpdateNotificationPreferences);
     on<RefreshNotifications>(_onRefreshNotifications);
     on<HandlePushNotification>(_onHandlePushNotification);
+    on<RegisterFcmToken>(_onRegisterFcmToken);
+    on<UnregisterFcmToken>(_onUnregisterFcmToken);
   }
 
   Future<void> _onInitializeNotifications(
@@ -26,7 +29,7 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
   ) async {
     try {
       await notificationRepository.initializeNotifications();
-      add(LoadNotifications());
+      // Don't auto-load here - need npp from login first
     } catch (e) {
       emit(NotificationError(e.toString()));
     }
@@ -38,22 +41,45 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
   ) async {
     try {
       emit(NotificationLoading());
+      _currentNpp = event.npp;
 
       final preferences = await notificationRepository.getNotificationPreferences();
       final result = await notificationRepository.getNotifications(
-        page: event.page,
-        limit: event.limit,
+        npp: event.npp,
+        isRead: event.isRead,
+        type: event.type,
+        perPage: event.perPage,
       );
+
+      // Get unread count
+      final unreadCount = await notificationRepository.getUnreadCount(npp: event.npp);
 
       emit(NotificationsLoadSuccess(
         notifications: result['notifications'],
         preferences: preferences,
-        unreadCount: result['unreadCount'],
-        hasMore: result['hasMore'],
-        currentPage: result['currentPage'],
+        unreadCount: unreadCount,
+        hasMore: result['hasMore'] ?? false,
+        currentPage: result['currentPage'] ?? 1,
       ));
     } catch (e) {
       emit(NotificationError(e.toString()));
+    }
+  }
+
+  Future<void> _onGetUnreadCount(
+    GetUnreadCount event,
+    Emitter<NotificationState> emit,
+  ) async {
+    try {
+      final unreadCount = await notificationRepository.getUnreadCount(npp: event.npp);
+      
+      if (state is NotificationsLoadSuccess) {
+        final currentState = state as NotificationsLoadSuccess;
+        emit(currentState.copyWith(unreadCount: unreadCount));
+      }
+    } catch (e) {
+      // Don't emit error for unread count fetch failure
+      print('Error fetching unread count: $e');
     }
   }
 
@@ -69,22 +95,20 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
 
         final updatedNotifications = currentState.notifications.map((notification) {
           if (notification.id == event.notificationId) {
-            return NotificationItem(
-              id: notification.id,
-              title: notification.title,
-              message: notification.message,
-              type: notification.type,
-              timestamp: notification.timestamp,
+            return notification.copyWith(
               isRead: true,
-              data: notification.data,
+              readAt: DateTime.now(),
             );
           }
           return notification;
         }).toList();
 
+        // Recalculate unread count
+        final newUnreadCount = updatedNotifications.where((n) => !n.isRead).length;
+
         emit(currentState.copyWith(
           notifications: updatedNotifications,
-          unreadCount: currentState.unreadCount - 1,
+          unreadCount: newUnreadCount,
         ));
       }
     } catch (e) {
@@ -100,17 +124,12 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
       if (state is NotificationsLoadSuccess) {
         final currentState = state as NotificationsLoadSuccess;
         
-        await notificationRepository.markAllNotificationsAsRead();
+        await notificationRepository.markAllNotificationsAsRead(npp: event.npp);
 
         final updatedNotifications = currentState.notifications.map((notification) {
-          return NotificationItem(
-            id: notification.id,
-            title: notification.title,
-            message: notification.message,
-            type: notification.type,
-            timestamp: notification.timestamp,
+          return notification.copyWith(
             isRead: true,
-            data: notification.data,
+            readAt: DateTime.now(),
           );
         }).toList();
 
@@ -134,37 +153,17 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
         
         await notificationRepository.deleteNotification(event.notificationId);
 
+        // Remove from local list
         final updatedNotifications = currentState.notifications
-            .where((notification) => notification.id != event.notificationId)
+            .where((n) => n.id != event.notificationId)
             .toList();
 
-        final updatedUnreadCount = updatedNotifications
-            .where((notification) => !notification.isRead)
-            .length;
+        // Recalculate unread count
+        final newUnreadCount = updatedNotifications.where((n) => !n.isRead).length;
 
         emit(currentState.copyWith(
           notifications: updatedNotifications,
-          unreadCount: updatedUnreadCount,
-        ));
-      }
-    } catch (e) {
-      emit(NotificationError(e.toString()));
-    }
-  }
-
-  Future<void> _onClearAllNotifications(
-    ClearAllNotifications event,
-    Emitter<NotificationState> emit,
-  ) async {
-    try {
-      if (state is NotificationsLoadSuccess) {
-        final currentState = state as NotificationsLoadSuccess;
-        
-        await notificationRepository.clearAllNotifications();
-
-        emit(currentState.copyWith(
-          notifications: [],
-          unreadCount: 0,
+          unreadCount: newUnreadCount,
         ));
       }
     } catch (e) {
@@ -203,21 +202,22 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
     Emitter<NotificationState> emit,
   ) async {
     try {
-      if (state is NotificationsLoadSuccess) {
-        final preferences = await notificationRepository.getNotificationPreferences();
-        final result = await notificationRepository.getNotifications(
-          page: 1,
-          limit: 20,
-        );
+      _currentNpp = event.npp;
+      
+      final preferences = await notificationRepository.getNotificationPreferences();
+      final result = await notificationRepository.getNotifications(
+        npp: event.npp,
+        perPage: 20,
+      );
+      final unreadCount = await notificationRepository.getUnreadCount(npp: event.npp);
 
-        emit(NotificationsLoadSuccess(
-          notifications: result['notifications'],
-          preferences: preferences,
-          unreadCount: result['unreadCount'],
-          hasMore: result['hasMore'],
-          currentPage: 1,
-        ));
-      }
+      emit(NotificationsLoadSuccess(
+        notifications: result['notifications'],
+        preferences: preferences,
+        unreadCount: unreadCount,
+        hasMore: result['hasMore'] ?? false,
+        currentPage: 1,
+      ));
     } catch (e) {
       emit(NotificationError(e.toString()));
     }
@@ -228,8 +228,8 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
     Emitter<NotificationState> emit,
   ) async {
     try {
-      final title = event.payload['title'] as String;
-      final body = event.payload['body'] as String;
+      final title = event.payload['title'] as String? ?? '';
+      final body = event.payload['body'] as String? ?? '';
       final data = event.payload['data'] as Map<String, dynamic>?;
 
       await notificationRepository.showLocalNotification(
@@ -238,10 +238,44 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
         payload: data != null ? json.encode(data) : null,
       );
 
-      // Refresh notifications list
-      add(RefreshNotifications());
+      // Refresh notifications list if we have npp
+      if (_currentNpp != null) {
+        add(RefreshNotifications(npp: _currentNpp!));
+      }
     } catch (e) {
       emit(NotificationError(e.toString()));
+    }
+  }
+
+  Future<void> _onRegisterFcmToken(
+    RegisterFcmToken event,
+    Emitter<NotificationState> emit,
+  ) async {
+    try {
+      await notificationRepository.registerFcmToken(
+        npp: event.npp,
+        fcmToken: event.fcmToken,
+        deviceId: event.deviceId,
+      );
+      _currentNpp = event.npp;
+    } catch (e) {
+      // Don't emit error state for FCM registration failure
+      // Just log it
+      print('Error registering FCM token: $e');
+    }
+  }
+
+  Future<void> _onUnregisterFcmToken(
+    UnregisterFcmToken event,
+    Emitter<NotificationState> emit,
+  ) async {
+    try {
+      await notificationRepository.unregisterFcmToken(fcmToken: event.fcmToken);
+      _currentNpp = null;
+    } catch (e) {
+      // Don't emit error state for FCM unregistration failure
+      // Just log it
+      print('Error unregistering FCM token: $e');
     }
   }
 }

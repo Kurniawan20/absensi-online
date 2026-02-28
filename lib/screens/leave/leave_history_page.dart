@@ -19,7 +19,7 @@ class _FilterOption {
 
 /// Halaman riwayat pengajuan izin/cuti
 class LeaveHistoryPage extends StatefulWidget {
-  const LeaveHistoryPage({Key? key}) : super(key: key);
+  const LeaveHistoryPage({super.key});
 
   @override
   State<LeaveHistoryPage> createState() => _LeaveHistoryPageState();
@@ -189,7 +189,7 @@ class _LeaveHistoryPageState extends State<LeaveHistoryPage> {
                   _loadHistory(refresh: true);
                 },
                 backgroundColor: Colors.grey[100],
-                selectedColor: const Color(0xFF016541).withOpacity(0.15),
+                selectedColor: const Color(0xFF016541).withValues(alpha: 0.15),
                 checkmarkColor: const Color(0xFF016541),
                 labelStyle: TextStyle(
                   color:

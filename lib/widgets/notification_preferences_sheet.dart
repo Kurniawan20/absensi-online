@@ -5,7 +5,7 @@ import '../bloc/notification/notification_event.dart';
 import '../bloc/notification/notification_state.dart';
 
 class NotificationPreferencesSheet extends StatefulWidget {
-  const NotificationPreferencesSheet({Key? key}) : super(key: key);
+  const NotificationPreferencesSheet({super.key});
 
   @override
   State<NotificationPreferencesSheet> createState() =>
@@ -208,7 +208,7 @@ class _NotificationPreferencesSheetState
       ),
       value: value,
       onChanged: onChanged,
-      activeColor: Theme.of(context).primaryColor,
+      activeThumbColor: Theme.of(context).primaryColor,
     );
   }
 

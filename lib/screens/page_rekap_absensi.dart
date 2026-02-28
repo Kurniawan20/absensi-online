@@ -2,10 +2,8 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
-import 'Apis.dart';
-import 'home_page.dart';
+import '../constants/api_constants.dart';
 import '../utils/storage_config.dart';
 
 class MonthYearPickerWidget extends StatefulWidget {
@@ -15,15 +13,15 @@ class MonthYearPickerWidget extends StatefulWidget {
   final Function(int year, int month) onChanged;
 
   const MonthYearPickerWidget({
-    Key? key,
+    super.key,
     required this.initialYear,
     required this.initialMonth,
     required this.primaryColor,
     required this.onChanged,
-  }) : super(key: key);
+  });
 
   @override
-  _MonthYearPickerWidgetState createState() => _MonthYearPickerWidgetState();
+  State<MonthYearPickerWidget> createState() => _MonthYearPickerWidgetState();
 }
 
 class _MonthYearPickerWidgetState extends State<MonthYearPickerWidget> {
@@ -109,11 +107,9 @@ class _MonthYearPickerWidgetState extends State<MonthYearPickerWidget> {
             itemBuilder: (context, index) {
               final monthIndex = index + 1;
               final isSelected = monthIndex == selectedMonth;
-              final isCurrentMonth =
-                  selectedYear == DateTime.now().year &&
+              final isCurrentMonth = selectedYear == DateTime.now().year &&
                   monthIndex == DateTime.now().month;
-              final isFutureMonth =
-                  selectedYear == DateTime.now().year &&
+              final isFutureMonth = selectedYear == DateTime.now().year &&
                   monthIndex > DateTime.now().month;
 
               return InkWell(
@@ -131,13 +127,13 @@ class _MonthYearPickerWidgetState extends State<MonthYearPickerWidget> {
                     color: isSelected
                         ? widget.primaryColor
                         : (isCurrentMonth
-                              ? widget.primaryColor.withOpacity(0.1)
-                              : Colors.transparent),
+                            ? widget.primaryColor.withValues(alpha: 0.1)
+                            : Colors.transparent),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: isSelected
                           ? widget.primaryColor
-                          : Colors.grey.withOpacity(0.3),
+                          : Colors.grey.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Center(
@@ -147,12 +143,11 @@ class _MonthYearPickerWidgetState extends State<MonthYearPickerWidget> {
                         color: isSelected
                             ? Colors.white
                             : (isFutureMonth
-                                  ? Colors.grey[400]
-                                  : Colors.black87),
+                                ? Colors.grey[400]
+                                : Colors.black87),
                         fontSize: 12,
-                        fontWeight: isSelected
-                            ? FontWeight.w600
-                            : FontWeight.w500,
+                        fontWeight:
+                            isSelected ? FontWeight.w600 : FontWeight.w500,
                       ),
                     ),
                   ),
@@ -168,24 +163,51 @@ class _MonthYearPickerWidgetState extends State<MonthYearPickerWidget> {
 
 class RekapAbsensi extends StatefulWidget {
   final String id;
-  const RekapAbsensi({Key? key, required this.id}) : super(key: key);
+  const RekapAbsensi({super.key, required this.id});
 
   @override
-  _RekapAbsensiState createState() => _RekapAbsensiState();
+  State<RekapAbsensi> createState() => _RekapAbsensiState();
 }
 
 class Data {
-  final String userId;
-  final String id;
-  final String title;
+  final String userId; // tanggal
+  final String id; // jam_masuk
+  final String title; // jam_keluar
+  final bool isLate; // is_late from API
+  final String? batasJamMasuk; // batas_jam_masuk from API
+  final String ketAbsensi; // ket_absensi from API
+  final String source; // sumber absensi: 'mobile' atau 'fingerprint'
 
-  Data({required this.userId, required this.id, required this.title});
+  Data({
+    required this.userId,
+    required this.id,
+    required this.title,
+    required this.isLate,
+    this.batasJamMasuk,
+    this.ketAbsensi = '-',
+    this.source = 'mobile',
+  });
+
+  /// Cek apakah absensi dari mesin fingerprint
+  bool get isFingerprint => source.toLowerCase() == 'fingerprint';
+
+  /// Status bisa ditentukan jika bukan fingerprint, batasJamMasuk ada, dan ketAbsensi bukan '-'
+  bool get isStatusKnown =>
+      !isFingerprint &&
+      batasJamMasuk != null &&
+      batasJamMasuk!.isNotEmpty &&
+      batasJamMasuk != 'null' &&
+      ketAbsensi != '-';
 
   factory Data.fromJson(Map<String, dynamic> json) {
     return Data(
-      userId: json['tanggal'],
-      id: json['jam_masuk'],
-      title: json['jam_keluar'],
+      userId: json['tanggal']?.toString() ?? '',
+      id: json['jam_masuk']?.toString() ?? '--:--',
+      title: json['jam_keluar']?.toString() ?? '--:--',
+      isLate: json['is_late'] == true || json['is_late'] == 1,
+      batasJamMasuk: json['batas_jam_masuk']?.toString(),
+      ketAbsensi: json['ket_absensi']?.toString() ?? '-',
+      source: json['source']?.toString() ?? 'mobile',
     );
   }
 }
@@ -203,36 +225,10 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
       'All'; // All, On Time, Overdue, No Check-in, No Check-out
   bool _showWeekendOnly = false;
   bool _showWeekdayOnly = false;
-  final List<Color> _avatarColors = [
-    Color(0xFFE3F2FD), // Light Blue
-    Color(0xFFF3E5F5), // Light Purple
-    Color(0xFFFCE4EC), // Light Pink
-    Color(0xFFF1F8E9), // Light Green
-    Color(0xFFFFF3E0), // Light Orange
-  ];
+
   final Color _primaryColor = Color.fromRGBO(1, 101, 65, 1);
-  TextEditingController _searchController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
-
-  Color _getAvatarColor(String userId) {
-    return _avatarColors[userId.hashCode % _avatarColors.length];
-  }
-
-  void _onItemTapped(int index) {
-    if (index != 1) {
-      switch (index) {
-        case 0:
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => HomePage()),
-          );
-          break;
-        case 2:
-          // Add navigation for profile screen when implemented
-          break;
-      }
-    }
-  }
 
   bool _isWeekend(String dateStr) {
     try {
@@ -253,26 +249,15 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
     }
   }
 
-  bool _isOnTime(String checkInTime) {
-    try {
-      // If no check-in time, consider it overdue (unless it's weekend)
-      if (checkInTime == '--:--' || checkInTime.isEmpty) {
-        return false;
-      }
-
-      final timeParts = checkInTime.split(':');
-      final hours = int.parse(timeParts[0]);
-      final minutes = int.parse(timeParts[1]);
-
-      // Convert to total minutes for easier comparison
-      final totalMinutes = hours * 60 + minutes;
-      final cutoffMinutes = 7 * 60 + 45; // 07:45 in minutes
-
-      // Weekend exception: Always consider weekend attendance as "on time"
-      return totalMinutes <= cutoffMinutes;
-    } catch (e) {
-      return false; // If there's any error parsing the time, consider it late
+  // Check if attendance is on time using isLate field from API
+  // Keep method for backward compatibility but now uses Data.isLate
+  bool _isOnTimeFromData(Data item) {
+    // If no check-in time, consider it not on time
+    if (item.id == '--:--' || item.id.isEmpty) {
+      return false;
     }
+    // Use is_late from API (inverted: isLate = false means on time)
+    return !item.isLate;
   }
 
   @override
@@ -317,11 +302,13 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
       bool matchesFilter = true;
       if (_statusFilter != 'All') {
         if (_statusFilter == 'On Time') {
-          // On Time includes: weekend attendance + weekday on time
-          matchesFilter = isWeekendDay || _isOnTime(item.id);
+          // Status harus diketahui, dan weekend atau tepat waktu
+          matchesFilter =
+              item.isStatusKnown && (isWeekendDay || _isOnTimeFromData(item));
         } else if (_statusFilter == 'Overdue') {
-          // Overdue only includes: weekday late attendance (weekend never overdue)
-          matchesFilter = !isWeekendDay && !_isOnTime(item.id);
+          // Status harus diketahui, bukan weekend, dan terlambat
+          matchesFilter =
+              item.isStatusKnown && !isWeekendDay && !_isOnTimeFromData(item);
         } else if (_statusFilter == 'No Check-in') {
           // No check-in: jam_masuk is empty or --:--
           matchesFilter = item.id == '--:--' || item.id.isEmpty;
@@ -332,9 +319,13 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
       } else if (_selectedFilter != 'Semua') {
         // Fallback to tab filter if no extended filter
         if (_selectedFilter == 'Tepat Waktu') {
-          matchesFilter = isWeekendDay || _isOnTime(item.id);
+          // Status harus diketahui, dan weekend atau tepat waktu
+          matchesFilter =
+              item.isStatusKnown && (isWeekendDay || _isOnTimeFromData(item));
         } else if (_selectedFilter == 'Terlambat') {
-          matchesFilter = !isWeekendDay && !_isOnTime(item.id);
+          // Status harus diketahui, bukan weekend, dan terlambat
+          matchesFilter =
+              item.isStatusKnown && !isWeekendDay && !_isOnTimeFromData(item);
         }
       }
 
@@ -342,54 +333,12 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
       bool matchesSearch = true;
       if (_searchQuery.isNotEmpty) {
         matchesSearch = item.userId.toLowerCase().contains(
-          _searchQuery.toLowerCase(),
-        );
+              _searchQuery.toLowerCase(),
+            );
       }
 
       return matchesFilter && matchesSearch;
     }).toList();
-  }
-
-  Future<void> _loadTokenAndFetchData() async {
-    try {
-      final token = await storage.read(key: 'auth_token');
-      final prefs = await SharedPreferences.getInstance();
-      final npp = prefs.getString('npp');
-
-      if (token == null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Sesi anda telah berakhir. Silakan login kembali.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        // Navigate back to home page
-        Navigator.pop(context);
-        return;
-      }
-
-      // Use Future.microtask to avoid calling setState during build
-      if (mounted) {
-        Future.microtask(
-          () => _fetchData(
-            _dateRange.start.year.toString(),
-            _dateRange.start.month.toString().padLeft(2, '0'),
-            _dateRange.end.year.toString(),
-            _dateRange.end.month.toString().padLeft(2, '0'),
-          ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      Navigator.pop(context);
-    }
   }
 
   Future<void> _fetchData(
@@ -416,7 +365,7 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
         throw Exception('Authentication token not found');
       }
 
-      final url = Uri.parse('${ApiConstants.BASE_URL}/getabsen');
+      final url = Uri.parse(ApiConstants.attendanceHistory);
       final requestBody = {
         "npp": widget.id,
         "year": startYear,
@@ -453,13 +402,39 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
           throw Exception('Empty response from server');
         }
 
-        print(
-          'RekapAbsensi: Parsed JSON Response Length: ${(jsonResponse as List).length}',
-        );
-        if ((jsonResponse as List).isNotEmpty) {
+        // Handle API response format: { rcode, message, data }
+        List<dynamic> records;
+        if (jsonResponse is Map<String, dynamic>) {
+          if (jsonResponse['rcode'] == '00') {
+            final responseData = jsonResponse['data'];
+            // Handle new format: { data: { attendance: [...], statistics: {...} } }
+            if (responseData is Map<String, dynamic> &&
+                responseData.containsKey('attendance')) {
+              records = responseData['attendance'] ?? [];
+              // Statistics is available at responseData['statistics'] if needed
+            }
+            // Handle legacy format: { data: [...] }
+            else if (responseData is List) {
+              records = responseData;
+            } else {
+              records = [];
+            }
+          } else {
+            throw Exception(
+                jsonResponse['message'] ?? 'Failed to load attendance data');
+          }
+        } else if (jsonResponse is List) {
+          // Fallback for legacy format (direct array)
+          records = jsonResponse;
+        } else {
+          throw Exception('Unexpected response format');
+        }
+
+        print('RekapAbsensi: Parsed JSON Response Length: ${records.length}');
+        if (records.isNotEmpty) {
           print('RekapAbsensi: First 3 records:');
-          for (int i = 0; i < (jsonResponse as List).length && i < 3; i++) {
-            final record = (jsonResponse as List)[i];
+          for (int i = 0; i < records.length && i < 3; i++) {
+            final record = records[i];
             print(
               '  Record $i: ${record['tanggal']} - ${record['jam_masuk']} - ${record['jam_keluar']}',
             );
@@ -468,9 +443,7 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
 
         setState(() {
           try {
-            data = (jsonResponse as List)
-                .map<Data>((item) => Data.fromJson(item))
-                .toList();
+            data = records.map<Data>((item) => Data.fromJson(item)).toList();
             _updatePaginatedData();
           } catch (e) {
             print('Error parsing data: $e');
@@ -1029,8 +1002,7 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                               children: [
                                 Icon(
                                   Icons.tune,
-                                  color:
-                                      (_statusFilter != 'All' ||
+                                  color: (_statusFilter != 'All' ||
                                           _showWeekendOnly ||
                                           _showWeekdayOnly)
                                       ? _primaryColor
@@ -1079,8 +1051,8 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                           bool matchesSearch = true;
                           if (_searchQuery.isNotEmpty) {
                             matchesSearch = item.userId.toLowerCase().contains(
-                              _searchQuery.toLowerCase(),
-                            );
+                                  _searchQuery.toLowerCase(),
+                                );
                           }
 
                           // Apply tab filter
@@ -1088,13 +1060,14 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                           if (filter != 'Semua') {
                             final isWeekendDay = _isWeekend(item.userId);
                             if (filter == 'Tepat Waktu') {
-                              // On Time includes: weekend attendance + weekday on time
-                              matchesFilter =
-                                  isWeekendDay || _isOnTime(item.id);
+                              // Status harus diketahui, dan weekend atau tepat waktu
+                              matchesFilter = item.isStatusKnown &&
+                                  (isWeekendDay || _isOnTimeFromData(item));
                             } else if (filter == 'Terlambat') {
-                              // Overdue only includes: weekday late attendance (weekend never overdue)
-                              matchesFilter =
-                                  !isWeekendDay && !_isOnTime(item.id);
+                              // Status harus diketahui, bukan weekend, dan terlambat
+                              matchesFilter = item.isStatusKnown &&
+                                  !isWeekendDay &&
+                                  !_isOnTimeFromData(item);
                             }
                           }
 
@@ -1152,8 +1125,8 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                                   color: filter == 'Semua'
                                       ? Color.fromRGBO(1, 101, 65, 1)
                                       : filter == 'Tepat Waktu'
-                                      ? Color.fromRGBO(1, 101, 65, 1)
-                                      : Colors.red,
+                                          ? Color.fromRGBO(1, 101, 65, 1)
+                                          : Colors.red,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
@@ -1187,9 +1160,11 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                     final item = _getFilteredData()[index];
 
                     final isWeekendDay = _isWeekend(item.userId);
-                    final isOnTimeStatus = isWeekendDay
-                        ? true
-                        : _isOnTime(item.id); // Weekend always "on time"
+                    // Cek apakah status bisa ditentukan
+                    final isStatusKnown = item.isStatusKnown;
+                    // Use is_late from API (weekend always "on time")
+                    final isOnTimeStatus =
+                        isWeekendDay ? true : _isOnTimeFromData(item);
 
                     return Container(
                       margin: EdgeInsets.only(bottom: 16),
@@ -1198,7 +1173,7 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
+                            color: Colors.black.withValues(alpha: 0.1),
                             offset: Offset(0, 0),
                             blurRadius: 3,
                             spreadRadius: 0,
@@ -1216,10 +1191,12 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 color: isWeekendDay
-                                    ? Colors.blue[100] // Blue for weekend
-                                    : isOnTimeStatus
-                                    ? Color.fromRGBO(1, 101, 65, 0.1)
-                                    : Colors.red[50],
+                                    ? Colors.blue[100]
+                                    : !isStatusKnown
+                                        ? Colors.grey[200]
+                                        : isOnTimeStatus
+                                            ? Color.fromRGBO(1, 101, 65, 0.1)
+                                            : Colors.red[50],
                               ),
                               child: Center(
                                 child: Icon(
@@ -1228,10 +1205,12 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                                       : Icons.fingerprint,
                                   size: 28,
                                   color: isWeekendDay
-                                      ? Colors.blue[800] // Blue for weekend
-                                      : isOnTimeStatus
-                                      ? Color.fromRGBO(1, 101, 65, 1)
-                                      : Colors.red,
+                                      ? Colors.blue[800]
+                                      : !isStatusKnown
+                                          ? Colors.grey[600]
+                                          : isOnTimeStatus
+                                              ? Color.fromRGBO(1, 101, 65, 1)
+                                              : Colors.red,
                                 ),
                               ),
                             ),
@@ -1293,8 +1272,8 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                                         color: isWeekendDay
                                             ? Colors.blue[600]
                                             : isOnTimeStatus
-                                            ? Colors.grey[600]
-                                            : Colors.red[400],
+                                                ? Colors.grey[600]
+                                                : Colors.red[400],
                                       ),
                                       SizedBox(width: 4),
                                       Text(
@@ -1304,8 +1283,8 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                                           color: isWeekendDay
                                               ? Colors.blue[600]
                                               : isOnTimeStatus
-                                              ? Colors.grey[600]
-                                              : Colors.red[400],
+                                                  ? Colors.grey[600]
+                                                  : Colors.red[400],
                                         ),
                                       ),
                                       SizedBox(width: 12),
@@ -1329,57 +1308,55 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                                 ],
                               ),
                             ),
-                            // Status
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isWeekendDay
-                                    ? Colors
-                                          .blue[100] // Blue background for weekend
-                                    : isOnTimeStatus
-                                    ? Color.fromRGBO(1, 101, 65, 0.1)
-                                    : Colors.red[50],
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    width: 6,
-                                    height: 6,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: isWeekendDay
-                                          ? Colors
-                                                .blue[800] // Blue dot for weekend
-                                          : isOnTimeStatus
-                                          ? Color.fromRGBO(1, 101, 65, 1)
-                                          : Colors.red,
+                            // Status - hanya tampil jika weekend atau status diketahui
+                            if (isWeekendDay || isStatusKnown)
+                              Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isWeekendDay
+                                      ? Colors.blue[100]
+                                      : isOnTimeStatus
+                                          ? Color.fromRGBO(1, 101, 65, 0.1)
+                                          : Colors.red[50],
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: isWeekendDay
+                                            ? Colors.blue[800]
+                                            : isOnTimeStatus
+                                                ? Color.fromRGBO(1, 101, 65, 1)
+                                                : Colors.red,
+                                      ),
                                     ),
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    isWeekendDay
-                                        ? 'Weekend'
-                                        : (isOnTimeStatus
+                                    SizedBox(width: 4),
+                                    Text(
+                                      isWeekendDay
+                                          ? 'Weekend'
+                                          : (isOnTimeStatus
                                               ? 'Tepat Waktu'
                                               : 'Terlambat'),
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: isWeekendDay
-                                          ? Colors
-                                                .blue[800] // Blue text for weekend
-                                          : isOnTimeStatus
-                                          ? Color.fromRGBO(1, 101, 65, 1)
-                                          : Colors.red,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isWeekendDay
+                                            ? Colors.blue[800]
+                                            : isOnTimeStatus
+                                                ? Color.fromRGBO(1, 101, 65, 1)
+                                                : Colors.red,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
                           ],
                         ),
                       ),
@@ -1391,7 +1368,7 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
           ),
           if (_isLoadingOverlay)
             Container(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
               child: Center(child: CircularProgressIndicator()),
             ),
         ],

@@ -7,9 +7,7 @@ import '../bloc/attendance_recap/attendance_recap_event.dart';
 import '../bloc/attendance_recap/attendance_recap_state.dart';
 import '../models/attendance_record.dart';
 import 'package:intl/intl.dart';
-import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 import 'home_page.dart';
-import 'page_rekap_absensi.dart';
 
 class MonthYearPicker extends StatefulWidget {
   final int initialYear;
@@ -17,14 +15,14 @@ class MonthYearPicker extends StatefulWidget {
   final Function(int year, int month) onChanged;
 
   const MonthYearPicker({
-    Key? key,
+    super.key,
     required this.initialYear,
     required this.initialMonth,
     required this.onChanged,
-  }) : super(key: key);
+  });
 
   @override
-  _MonthYearPickerState createState() => _MonthYearPickerState();
+  State<MonthYearPicker> createState() => _MonthYearPickerState();
 }
 
 class _MonthYearPickerState extends State<MonthYearPicker> {
@@ -118,7 +116,7 @@ class _MonthYearPickerState extends State<MonthYearPicker> {
                     border: Border.all(
                       color: isSelected 
                           ? Color.fromRGBO(1, 101, 65, 1)
-                          : Colors.grey.withOpacity(0.3),
+                          : Colors.grey.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Center(
@@ -144,7 +142,7 @@ class _MonthYearPickerState extends State<MonthYearPicker> {
 }
 
 class AttendanceRecapScreen extends StatefulWidget {
-  const AttendanceRecapScreen({Key? key}) : super(key: key);
+  const AttendanceRecapScreen({super.key});
 
   @override
   State<AttendanceRecapScreen> createState() => _AttendanceRecapScreenState();
@@ -154,7 +152,7 @@ class _AttendanceRecapScreenState extends State<AttendanceRecapScreen> {
   String selectedYear = DateTime.now().year.toString();
   String selectedMonth = DateTime.now().month.toString().padLeft(2, '0');
   String? npp;
-  int _selectedIndex = 1; // Set to 1 since this is the attendance recap screen
+  final int _selectedIndex = 1; // Set to 1 since this is the attendance recap screen
 
   @override
   void initState() {
@@ -216,11 +214,11 @@ class _AttendanceRecapScreenState extends State<AttendanceRecapScreen> {
           children: [
             const Text('Attendance Recap'),
             Text(
-              '${DateFormat('MMMM yyyy').format(DateTime(int.parse(selectedYear), int.parse(selectedMonth)))}',
+              DateFormat('MMMM yyyy').format(DateTime(int.parse(selectedYear), int.parse(selectedMonth))),
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w400,
-                color: Colors.white.withOpacity(0.9),
+                color: Colors.white.withValues(alpha: 0.9),
               ),
             ),
           ],

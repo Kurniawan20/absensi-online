@@ -1,4 +1,3 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -48,7 +47,7 @@ class AttendanceService {
 
       final now = DateTime.now();
       final response = await http.post(
-        Uri.parse('${ApiConstants.BASE_URL}/getabsen'),
+        Uri.parse(ApiConstants.attendanceHistory),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -64,16 +63,54 @@ class AttendanceService {
 
       if (response.statusCode == 200) {
         final responseStr = response.body.toString().replaceAll('""', '"');
-        final records = List<Map<String, dynamic>>.from(jsonDecode(responseStr));
-        
-        final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
-        
+        final responseData = jsonDecode(responseStr);
+
+        // Handle API response format: { rcode, message, data }
+        List<Map<String, dynamic>> records;
+        if (responseData is Map<String, dynamic>) {
+          if (responseData['rcode'] == '00') {
+            final data = responseData['data'];
+            // Handle new format: { data: { attendance: [...], statistics: {...} } }
+            if (data is Map<String, dynamic> &&
+                data.containsKey('attendance')) {
+              records =
+                  List<Map<String, dynamic>>.from(data['attendance'] ?? []);
+            }
+            // Handle legacy format: { data: [...] }
+            else if (data is List) {
+              records = List<Map<String, dynamic>>.from(data);
+            } else {
+              records = [];
+            }
+          } else {
+            print('API returned error: ${responseData['message']}');
+            return {
+              'success': false,
+              'check_in_time': '--:--',
+              'check_out_time': '--:--',
+            };
+          }
+        } else if (responseData is List) {
+          // Fallback for legacy format (direct array)
+          records = List<Map<String, dynamic>>.from(responseData);
+        } else {
+          print('Unexpected response format');
+          return {
+            'success': false,
+            'check_in_time': '--:--',
+            'check_out_time': '--:--',
+          };
+        }
+
+        final todayStr =
+            "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+
         print('Looking for record with date: $todayStr');
         print('Available records: $records');
-        
+
         final todayRecord = records.firstWhere(
           (record) => record['tanggal'].toString() == todayStr,
-          orElse: () => {
+          orElse: () => <String, dynamic>{
             'tanggal': todayStr,
             'jam_masuk': '--:--',
             'jam_keluar': '--:--',
@@ -81,14 +118,14 @@ class AttendanceService {
         );
 
         print('Today\'s record: $todayRecord');
-        
+
         return {
           'success': true,
           'check_in_time': todayRecord['jam_masuk']?.toString() ?? '--:--',
           'check_out_time': todayRecord['jam_keluar']?.toString() ?? '--:--',
         };
       }
-      
+
       return {
         'success': false,
         'check_in_time': '--:--',
@@ -105,28 +142,16 @@ class AttendanceService {
     }
   }
 
-  Future<Map<String, dynamic>> _getLocalAttendance() async {
-    final prefs = await SharedPreferences.getInstance();
-    final checkIn = prefs.getString('today_check_in') ?? prefs.getString('jam_masuk') ?? '--:--';
-    final checkOut = prefs.getString('today_check_out') ?? prefs.getString('jam_keluar') ?? '--:--';
-    
-    return {
-      'success': true,
-      'check_in_time': checkIn,
-      'check_out_time': checkOut,
-    };
-  }
-
   Future<void> updateAttendanceTime(String type, String time) async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     // Convert type to match the API response format
     if (type == 'absenmasuk') {
       prefs.setString('today_check_in', time);
-      prefs.setString('jam_masuk', time);  // Add this for compatibility
+      prefs.setString('jam_masuk', time); // Add this for compatibility
     } else if (type == 'absenpulang') {
       prefs.setString('today_check_out', time);
-      prefs.setString('jam_keluar', time);  // Add this for compatibility
+      prefs.setString('jam_keluar', time); // Add this for compatibility
     }
 
     // Notify listeners about the update

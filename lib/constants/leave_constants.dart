@@ -1,4 +1,5 @@
 /// Konstanta untuk fitur Izin & Cuti
+library leave_constants;
 
 class LeaveConstants {
   LeaveConstants._();
@@ -21,10 +22,10 @@ class LeaveConstants {
   // Batas waktu pengajuan (dalam hari sebelum tanggal mulai)
   static const int minimumAdvanceNotice = 3; // minimal 3 hari sebelumnya
   static const int sickLeaveAdvanceNotice = 0; // izin sakit bisa hari H
-  
+
   // Maksimal file upload (dalam bytes)
   static const int maxFileSize = 5 * 1024 * 1024; // 5MB
-  
+
   // Format file yang diizinkan
   static const List<String> allowedFileExtensions = [
     'pdf',
@@ -37,10 +38,14 @@ class LeaveConstants {
   static const String errorNoConnection = 'Tidak dapat terhubung ke server';
   static const String errorInvalidDate = 'Tanggal tidak valid';
   static const String errorInsufficientBalance = 'Sisa cuti tidak mencukupi';
-  static const String errorPastDate = 'Tidak dapat mengajukan cuti untuk tanggal yang sudah lewat';
-  static const String errorWeekend = 'Tidak dapat mengajukan cuti di hari weekend';
-  static const String errorOverlapping = 'Sudah ada pengajuan cuti di tanggal tersebut';
-  static const String errorDocumentRequired = 'Dokumen pendukung wajib dilampirkan';
+  static const String errorPastDate =
+      'Tidak dapat mengajukan cuti untuk tanggal yang sudah lewat';
+  static const String errorWeekend =
+      'Tidak dapat mengajukan cuti di hari weekend';
+  static const String errorOverlapping =
+      'Sudah ada pengajuan cuti di tanggal tersebut';
+  static const String errorDocumentRequired =
+      'Dokumen pendukung wajib dilampirkan';
   static const String errorFileTooLarge = 'Ukuran file maksimal 5MB';
   static const String errorInvalidFileType = 'Format file tidak didukung';
 
@@ -52,7 +57,8 @@ class LeaveConstants {
   static const String labelSelectStartDate = 'Pilih Tanggal Mulai';
   static const String labelSelectEndDate = 'Pilih Tanggal Selesai';
   static const String labelReason = 'Alasan';
-  static const String labelReasonHint = 'Jelaskan alasan pengajuan izin/cuti Anda...';
+  static const String labelReasonHint =
+      'Jelaskan alasan pengajuan izin/cuti Anda...';
   static const String labelAttachment = 'Lampiran';
   static const String labelUploadDocument = 'Upload Dokumen';
   static const String labelSubmit = 'Ajukan';

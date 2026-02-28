@@ -1,10 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
-import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart' show IOClient;
 import '../constants/api_constants.dart';
-import '../models/attendance_record.dart';
 import '../utils/secure_storage.dart';
 
 class AttendanceRecapRepository {
@@ -37,7 +35,7 @@ class AttendanceRecapRepository {
         };
       }
 
-      final url = Uri.parse('${ApiConstants.BASE_URL}/getabsen');
+      final url = Uri.parse(ApiConstants.attendanceHistory);
       print('Requesting URL: $url');
       
       final requestBody = {
@@ -65,20 +63,40 @@ class AttendanceRecapRepository {
       print('Response body: ${response.body}');
 
       if (response.statusCode == 200) {
-        final List<dynamic> jsonList = jsonDecode(response.body);
-        print('Parsed JSON list length: ${jsonList.length}');
-        print('First record: ${jsonList.isNotEmpty ? jsonList.first : "No records"}');
+        final responseData = jsonDecode(response.body);
         
-        // Debug: Print all dates in the response
-        if (jsonList.isNotEmpty) {
-          print('All dates in response:');
-          for (int i = 0; i < jsonList.length && i < 5; i++) {
-            final record = jsonList[i];
-            print('  Record $i: ${record['tanggal']} - ${record['jam_masuk']} - ${record['jam_keluar']}');
+        // Handle API response format: { rcode, message, data }
+        if (responseData is Map<String, dynamic>) {
+          if (responseData['rcode'] == '00') {
+            final List<dynamic> jsonList = responseData['data'] ?? [];
+            print('Parsed JSON list length: ${jsonList.length}');
+            print('First record: ${jsonList.isNotEmpty ? jsonList.first : "No records"}');
+            
+            // Debug: Print all dates in the response
+            if (jsonList.isNotEmpty) {
+              print('All dates in response:');
+              for (int i = 0; i < jsonList.length && i < 5; i++) {
+                final record = jsonList[i];
+                print('  Record $i: ${record['tanggal']} - ${record['jam_masuk']} - ${record['jam_keluar']}');
+              }
+            }
+            
+            return {'success': true, 'records': jsonList};
+          } else {
+            print('API returned error rcode: ${responseData['rcode']}');
+            return {
+              'success': false,
+              'error': responseData['message'] ?? 'Failed to load attendance history',
+            };
           }
+        } else if (responseData is List) {
+          // Fallback: jika API langsung return array (backward compatibility)
+          print('Response is direct array (legacy format), length: ${responseData.length}');
+          return {'success': true, 'records': responseData};
         }
         
-        return {'success': true, 'records': jsonList};
+        print('Unexpected response format: ${responseData.runtimeType}');
+        return {'success': false, 'error': 'Unexpected response format'};
       } else {
         print('Request failed with status: ${response.statusCode}');
         return {
@@ -128,7 +146,7 @@ class AttendanceRecapRepository {
         };
       }
 
-      final url = Uri.parse('${ApiConstants.BASE_URL}/generatereport');
+      final url = Uri.parse(ApiConstants.generateReport);
       print('Requesting URL: $url');
 
       final response = await _client.post(

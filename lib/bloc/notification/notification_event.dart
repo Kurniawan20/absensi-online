@@ -7,21 +7,37 @@ abstract class NotificationEvent extends Equatable {
 
 class InitializeNotifications extends NotificationEvent {}
 
+/// Load notifications with npp required
 class LoadNotifications extends NotificationEvent {
-  final int page;
-  final int limit;
+  final String npp;
+  final bool? isRead;
+  final String? type;
+  final int perPage;
 
   LoadNotifications({
-    this.page = 1,
-    this.limit = 20,
+    required this.npp,
+    this.isRead,
+    this.type,
+    this.perPage = 20,
   });
 
   @override
-  List<Object?> get props => [page, limit];
+  List<Object?> get props => [npp, isRead, type, perPage];
 }
 
+/// Get unread count
+class GetUnreadCount extends NotificationEvent {
+  final String npp;
+
+  GetUnreadCount({required this.npp});
+
+  @override
+  List<Object?> get props => [npp];
+}
+
+/// Mark single notification as read
 class MarkNotificationAsRead extends NotificationEvent {
-  final String notificationId;
+  final int notificationId;
 
   MarkNotificationAsRead(this.notificationId);
 
@@ -29,18 +45,25 @@ class MarkNotificationAsRead extends NotificationEvent {
   List<Object?> get props => [notificationId];
 }
 
-class MarkAllNotificationsAsRead extends NotificationEvent {}
+/// Mark all notifications as read
+class MarkAllNotificationsAsRead extends NotificationEvent {
+  final String npp;
 
+  MarkAllNotificationsAsRead({required this.npp});
+
+  @override
+  List<Object?> get props => [npp];
+}
+
+/// Delete notification
 class DeleteNotification extends NotificationEvent {
-  final String notificationId;
+  final int notificationId;
 
   DeleteNotification(this.notificationId);
 
   @override
   List<Object?> get props => [notificationId];
 }
-
-class ClearAllNotifications extends NotificationEvent {}
 
 class UpdateNotificationPreferences extends NotificationEvent {
   final bool pushEnabled;
@@ -67,7 +90,15 @@ class UpdateNotificationPreferences extends NotificationEvent {
       ];
 }
 
-class RefreshNotifications extends NotificationEvent {}
+/// Refresh notifications
+class RefreshNotifications extends NotificationEvent {
+  final String npp;
+
+  RefreshNotifications({required this.npp});
+
+  @override
+  List<Object?> get props => [npp];
+}
 
 class HandlePushNotification extends NotificationEvent {
   final Map<String, dynamic> payload;
@@ -76,4 +107,30 @@ class HandlePushNotification extends NotificationEvent {
 
   @override
   List<Object?> get props => [payload];
+}
+
+/// Register FCM token after login
+class RegisterFcmToken extends NotificationEvent {
+  final String npp;
+  final String fcmToken;
+  final String? deviceId;
+
+  RegisterFcmToken({
+    required this.npp,
+    required this.fcmToken,
+    this.deviceId,
+  });
+
+  @override
+  List<Object?> get props => [npp, fcmToken, deviceId];
+}
+
+/// Unregister FCM token on logout
+class UnregisterFcmToken extends NotificationEvent {
+  final String fcmToken;
+
+  UnregisterFcmToken({required this.fcmToken});
+
+  @override
+  List<Object?> get props => [fcmToken];
 }

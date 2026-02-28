@@ -6,11 +6,11 @@ class SkeletonText extends StatefulWidget {
   final double borderRadius;
 
   const SkeletonText({
-    Key? key,
+    super.key,
     required this.width,
     this.height = 20,
     this.borderRadius = 4,
-  }) : super(key: key);
+  });
 
   @override
   State<SkeletonText> createState() => _SkeletonTextState();

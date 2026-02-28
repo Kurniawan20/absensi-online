@@ -115,17 +115,26 @@ Future<void> _setupFirebaseMessaging() async {
   );
   await flutterLocalNotificationsPlugin.initialize(initSettings);
 
-  // Request permission for iOS
-  final settings = await FirebaseMessaging.instance.requestPermission(
-    alert: true,
-    badge: true,
-    sound: true,
-  );
-  print('Notification permission status: ${settings.authorizationStatus}');
+  // Minta izin notifikasi (graceful - tidak crash jika gagal)
+  try {
+    final settings = await FirebaseMessaging.instance.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    print('Notification permission status: ${settings.authorizationStatus}');
 
-  // Get and log current FCM token
-  final fcmToken = await FirebaseMessaging.instance.getToken();
-  print('Current FCM Token: ${fcmToken?.substring(0, 30)}...');
+    // Ambil FCM token (bisa null di emulator tanpa Play Services)
+    final fcmToken = await FirebaseMessaging.instance.getToken();
+    if (fcmToken != null) {
+      print('Current FCM Token: ${fcmToken.substring(0, 30)}...');
+    } else {
+      print('FCM Token: null (mungkin emulator tanpa Google Play Services)');
+    }
+  } catch (e) {
+    // Jangan crash app jika FCM tidak tersedia
+    print('Firebase Messaging setup warning (non-fatal): $e');
+  }
 
   // Handle foreground messages
   FirebaseMessaging.onMessage.listen((RemoteMessage message) {
@@ -168,10 +177,10 @@ Future<void> _setupFirebaseMessaging() async {
   FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
     print('=== Notification Tapped (from background) ===');
     print('Data: ${message.data}');
-    
+
     // Trigger notification list refresh
     NotificationRefreshService().triggerRefresh();
-    
+
     // Navigation will be handled by the app based on message.data
   });
 
@@ -242,7 +251,8 @@ class MyApp extends StatelessWidget {
           create: (context) => LeaveBloc(leaveRepository: leaveRepository),
         ),
         BlocProvider(
-          create: (context) => DeviceResetBloc(repository: deviceResetRepository),
+          create: (context) =>
+              DeviceResetBloc(repository: deviceResetRepository),
         ),
       ],
       child: MaterialApp(

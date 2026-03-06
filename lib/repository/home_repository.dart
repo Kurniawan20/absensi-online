@@ -145,6 +145,20 @@ class HomeRepository {
 
       final data = json.decode(response.body);
 
+      // Debug: cetak raw response untuk diagnosa
+      print('[BLOG API] Status: ${response.statusCode}');
+      print('[BLOG API] rcode: ${data['rcode']}');
+      if (data['data'] != null) {
+        final rawData = data['data'];
+        print('[BLOG API] data type: ${rawData.runtimeType}');
+        if (rawData is List && rawData.isNotEmpty) {
+          final first = rawData.first;
+          print('[BLOG API] First post image: ${first['image']}');
+          print(
+              '[BLOG API] First post image_thumbnail: ${first['image_thumbnail']}');
+        }
+      }
+
       if (data['rcode'] == '00') {
         final List<BlogPost> posts = (data['data'] as List)
             .map((item) => BlogPost.fromJson(item))

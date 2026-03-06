@@ -392,11 +392,26 @@ class _SplashScreenState extends State<SplashScreen>
                           scale: _logoScale.value,
                           child: Opacity(
                             opacity: _logoFade.value,
-                            child: Image.asset(
-                              'assets/images/ic_launcher.png',
-                              width: 110,
-                              height: 110,
-                              fit: BoxFit.contain,
+                            child: Container(
+                              width: 128,
+                              height: 128,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.18),
+                                    blurRadius: 24,
+                                    spreadRadius: 2,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ],
+                              ),
+                              padding: const EdgeInsets.all(18),
+                              child: Image.asset(
+                                'assets/images/ic_launcher.png',
+                                fit: BoxFit.contain,
+                              ),
                             ),
                           ),
                         );

@@ -375,7 +375,7 @@ class _HomeScreenState extends State<HomePage> {
                                   )
                                 : Text(
                                     _workingHours != null
-                                        ? 'Jam Kerja : ${_workingHours!.startJamMasuk} - ${_workingHours!.startJamPulang}'
+                                        ? 'Jam Kerja : ${_workingHours!.endJamMasuk ?? _workingHours!.startJamMasuk} - ${_workingHours!.startJamPulang}'
                                         : 'Jam Kerja : --:-- - --:--',
                                     style: TextStyle(
                                       fontFamily: 'Poppins',
@@ -1390,11 +1390,15 @@ class _HomeScreenState extends State<HomePage> {
   }
 
   String _getBlogImageUrl(String path) {
-    if (path.startsWith('http')) {
-      return path;
-    }
-    final baseUrl = ApiConstants.baseUrl.replaceAll('/api', '');
-    return '$baseUrl/storage/$path';
+    if (path.startsWith('http')) return path;
+
+    // Hapus hanya sufiks '/api' di akhir baseUrl, bukan semua kemunculannya
+    final rawBase = ApiConstants.baseUrl;
+    final storageBase = rawBase.endsWith('/api')
+        ? rawBase.substring(0, rawBase.length - 4)
+        : rawBase;
+
+    return '$storageBase/storage/$path';
   }
 
   Color _getBlogCategoryColor(BlogCategory category) {

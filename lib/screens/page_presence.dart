@@ -1460,7 +1460,8 @@ class _PresenceState extends State<Presence> {
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.03),
+                                        color: Colors.black
+                                            .withValues(alpha: 0.03),
                                         blurRadius: 4,
                                         offset: Offset(0, 2),
                                       ),
@@ -1479,11 +1480,15 @@ class _PresenceState extends State<Presence> {
                                               colors: [
                                                 Theme.of(
                                                   context,
-                                                ).primaryColor.withValues(alpha: 0.5),
+                                                )
+                                                    .primaryColor
+                                                    .withValues(alpha: 0.5),
                                                 Theme.of(context).primaryColor,
                                                 Theme.of(
                                                   context,
-                                                ).primaryColor.withValues(alpha: 0.5),
+                                                )
+                                                    .primaryColor
+                                                    .withValues(alpha: 0.5),
                                               ],
                                               stops: [
                                                 value - 0.2,
@@ -1579,7 +1584,9 @@ class _PresenceState extends State<Presence> {
                                             BoxShadow(
                                               color: Theme.of(
                                                 context,
-                                              ).primaryColor.withValues(alpha: 0.3),
+                                              )
+                                                  .primaryColor
+                                                  .withValues(alpha: 0.3),
                                               blurRadius: 8,
                                               offset: Offset(2, 2),
                                               spreadRadius: 1,
@@ -1652,12 +1659,14 @@ class _PresenceState extends State<Presence> {
                                     shape: BoxShape.circle,
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.15),
+                                        color: Colors.black
+                                            .withValues(alpha: 0.15),
                                         blurRadius: 6,
                                         offset: Offset(0, 2),
                                       ),
                                       BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.1),
+                                        color:
+                                            Colors.black.withValues(alpha: 0.1),
                                         blurRadius: 3,
                                         offset: Offset(0, 1),
                                       ),

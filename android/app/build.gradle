@@ -36,7 +36,7 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace "id.basitd.absensi.mobile"
     compileSdk 36
-    ndkVersion "27.0.12077973"  // NDK 27+ diperlukan untuk dukungan 16KB page size
+    ndkVersion "27.2.12479018"  // NDK r27c - stable release dengan full 16KB page size support
 
     compileOptions {
         coreLibraryDesugaringEnabled true
@@ -93,6 +93,14 @@ android {
             ndk {
                 debugSymbolLevel 'SYMBOL_TABLE'
             }
+        }
+    }
+
+    // Wajib untuk dukungan 16 KB memory page size (Google Play requirement)
+    // Tanpa ini, .so libraries akan di-extract dengan alignment 4KB (default lama)
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = false
         }
     }
 }

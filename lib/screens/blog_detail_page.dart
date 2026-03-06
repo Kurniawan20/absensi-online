@@ -92,8 +92,14 @@ class _BlogDetailPageState extends State<BlogDetailPage> {
   String _getImageUrl(String? imagePath) {
     if (imagePath == null || imagePath.isEmpty) return '';
     if (imagePath.startsWith('http')) return imagePath;
-    final baseUrl = ApiConstants.baseUrl.replaceAll('/api', '');
-    return '$baseUrl/storage/$imagePath';
+
+    // Hapus hanya sufiks '/api' di akhir baseUrl, bukan semua kemunculannya
+    final rawBase = ApiConstants.baseUrl;
+    final storageBase = rawBase.endsWith('/api')
+        ? rawBase.substring(0, rawBase.length - 4)
+        : rawBase;
+
+    return '$storageBase/storage/$imagePath';
   }
 
   @override
@@ -224,50 +230,42 @@ class _BlogDetailPageState extends State<BlogDetailPage> {
   }
 
   Widget _buildHeroImage() {
-    return SizedBox(
-      height: 300,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Image - use RepaintBoundary to isolate repaints
-          RepaintBoundary(
-            child: CachedNetworkImage(
-              imageUrl: _getImageUrl(_blogDetail!.image),
-              fit: BoxFit.cover,
-              memCacheHeight: 600, // Optimize memory
-              placeholder: (context, url) => Container(
-                color: Colors.grey[200],
-                child: const Center(
-                  child: CircularProgressIndicator(
-                    color: Color.fromRGBO(1, 101, 65, 1),
-                    strokeWidth: 2,
-                  ),
-                ),
-              ),
-              errorWidget: (context, url, error) => Container(
-                color: Colors.grey[200],
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      FluentIcons.image_off_24_regular,
-                      size: 48,
-                      color: Colors.grey[400],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Gambar tidak tersedia',
-                      style: TextStyle(
-                        color: Colors.grey[500],
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
+    return RepaintBoundary(
+      child: CachedNetworkImage(
+        imageUrl: _getImageUrl(_blogDetail!.image),
+        width: double.infinity,
+        fit: BoxFit.fitWidth, // Tampilkan gambar penuh sesuai lebar layar
+        placeholder: (context, url) => SizedBox(
+          height: 260,
+          child: Container(
+            color: Colors.grey[200],
+            child: const Center(
+              child: CircularProgressIndicator(
+                color: Color.fromRGBO(1, 101, 65, 1),
+                strokeWidth: 2,
               ),
             ),
           ),
-        ],
+        ),
+        errorWidget: (context, url, error) => Container(
+          height: 180,
+          color: Colors.grey[200],
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                FluentIcons.image_off_24_regular,
+                size: 48,
+                color: Colors.grey[400],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Gambar tidak tersedia',
+                style: TextStyle(color: Colors.grey[500], fontSize: 14),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -595,8 +593,8 @@ class _BlogDetailPageState extends State<BlogDetailPage> {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color:
-                        _getFileIconColor(attachment.fileType).withValues(alpha: 0.1),
+                    color: _getFileIconColor(attachment.fileType)
+                        .withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(

@@ -219,7 +219,9 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
   bool _isLoadingOverlay = false;
   late DateTimeRange _dateRange;
   String _selectedFilter = 'Semua';
-  final List<String> _filters = ['Semua', 'Tepat Waktu', 'Terlambat'];
+  final List<String> _filters = [
+    'Semua'
+  ]; // Tepat Waktu & Terlambat disembunyikan sementara
   // Extended filter options for the filter modal
   String _statusFilter =
       'All'; // All, On Time, Overdue, No Check-in, No Check-out
@@ -1160,11 +1162,6 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                     final item = _getFilteredData()[index];
 
                     final isWeekendDay = _isWeekend(item.userId);
-                    // Cek apakah status bisa ditentukan
-                    final isStatusKnown = item.isStatusKnown;
-                    // Use is_late from API (weekend always "on time")
-                    final isOnTimeStatus =
-                        isWeekendDay ? true : _isOnTimeFromData(item);
 
                     return Container(
                       margin: EdgeInsets.only(bottom: 16),
@@ -1190,13 +1187,10 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                               height: 48,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
+                                // Warna netral sementara - status tepat waktu/telat belum aktif
                                 color: isWeekendDay
                                     ? Colors.blue[100]
-                                    : !isStatusKnown
-                                        ? Colors.grey[200]
-                                        : isOnTimeStatus
-                                            ? Color.fromRGBO(1, 101, 65, 0.1)
-                                            : Colors.red[50],
+                                    : Colors.grey[200],
                               ),
                               child: Center(
                                 child: Icon(
@@ -1206,11 +1200,7 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                                   size: 28,
                                   color: isWeekendDay
                                       ? Colors.blue[800]
-                                      : !isStatusKnown
-                                          ? Colors.grey[600]
-                                          : isOnTimeStatus
-                                              ? Color.fromRGBO(1, 101, 65, 1)
-                                              : Colors.red,
+                                      : Colors.grey[600],
                                 ),
                               ),
                             ),
@@ -1271,20 +1261,17 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                                         size: 14,
                                         color: isWeekendDay
                                             ? Colors.blue[600]
-                                            : isOnTimeStatus
-                                                ? Colors.grey[600]
-                                                : Colors.red[400],
+                                            : Colors.grey[600],
                                       ),
                                       SizedBox(width: 4),
                                       Text(
                                         item.id,
                                         style: TextStyle(
                                           fontSize: 14,
+                                          // Warna netral - status belum aktif
                                           color: isWeekendDay
                                               ? Colors.blue[600]
-                                              : isOnTimeStatus
-                                                  ? Colors.grey[600]
-                                                  : Colors.red[400],
+                                              : Colors.grey[600],
                                         ),
                                       ),
                                       SizedBox(width: 12),
@@ -1308,19 +1295,15 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                                 ],
                               ),
                             ),
-                            // Status - hanya tampil jika weekend atau status diketahui
-                            if (isWeekendDay || isStatusKnown)
+                            // Status - hanya tampilkan badge Weekend
+                            if (isWeekendDay)
                               Container(
                                 padding: EdgeInsets.symmetric(
                                   horizontal: 8,
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: isWeekendDay
-                                      ? Colors.blue[100]
-                                      : isOnTimeStatus
-                                          ? Color.fromRGBO(1, 101, 65, 0.1)
-                                          : Colors.red[50],
+                                  color: Colors.blue[100],
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Row(
@@ -1331,27 +1314,15 @@ class _RekapAbsensiState extends State<RekapAbsensi> {
                                       height: 6,
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
-                                        color: isWeekendDay
-                                            ? Colors.blue[800]
-                                            : isOnTimeStatus
-                                                ? Color.fromRGBO(1, 101, 65, 1)
-                                                : Colors.red,
+                                        color: Colors.blue[800],
                                       ),
                                     ),
                                     SizedBox(width: 4),
                                     Text(
-                                      isWeekendDay
-                                          ? 'Weekend'
-                                          : (isOnTimeStatus
-                                              ? 'Tepat Waktu'
-                                              : 'Terlambat'),
+                                      'Weekend',
                                       style: TextStyle(
                                         fontSize: 12,
-                                        color: isWeekendDay
-                                            ? Colors.blue[800]
-                                            : isOnTimeStatus
-                                                ? Color.fromRGBO(1, 101, 65, 1)
-                                                : Colors.red,
+                                        color: Colors.blue[800],
                                       ),
                                     ),
                                   ],

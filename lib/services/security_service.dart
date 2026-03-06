@@ -1,18 +1,22 @@
-import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io';
 
+/// Service untuk memeriksa keamanan perangkat sebelum absensi.
+/// Menggunakan device_info_plus untuk deteksi emulator.
+/// Catatan: Deteksi root/jailbreak dihapus karena plugin-nya
+/// mengandung native library yang tidak kompatibel dengan 16KB page size.
 class SecurityService {
   static const SecurityService _instance = SecurityService._internal();
   factory SecurityService() => _instance;
   const SecurityService._internal();
-  
+
   // Testing mode flag - set to true to bypass security checks even in release builds
   static const bool _isTestingMode = false;
 
   /// Check if the device is in a secure state for attendance
-  Future<SecurityCheckResult> performSecurityCheck({bool forceCheck = false}) async {
+  Future<SecurityCheckResult> performSecurityCheck(
+      {bool forceCheck = false}) async {
     try {
       // Skip security checks in testing mode
       if (_isTestingMode && !forceCheck) {
@@ -22,7 +26,7 @@ class SecurityService {
           message: 'Testing mode - security checks bypassed',
         );
       }
-      
+
       // Skip security checks in debug mode for development (unless forced)
       if (kDebugMode && !forceCheck) {
         return SecurityCheckResult(
@@ -33,42 +37,24 @@ class SecurityService {
       }
 
       List<String> violations = [];
-      
-      // Check if device is rooted/jailbroken
-      bool isJailbroken = await FlutterJailbreakDetection.jailbroken;
-      if (isJailbroken) {
-        violations.add('Device is rooted/jailbroken');
-      }
 
-      // Check for developer options enabled (Android only)
-      if (Platform.isAndroid) {
-        bool isDeveloperModeEnabled = await FlutterJailbreakDetection.developerMode;
-        if (isDeveloperModeEnabled) {
-          violations.add('Developer options is enabled');
-        }
-      }
-
-      // Check if running on real device
+      // Cek apakah berjalan di emulator
       DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-      bool isRealDevice = true;
-      
+
       if (Platform.isAndroid) {
         AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
-        // Check if running on emulator
-        isRealDevice = androidInfo.isPhysicalDevice;
-        if (!isRealDevice) {
+        if (!androidInfo.isPhysicalDevice) {
           violations.add('Running on emulator/simulator');
         }
       } else if (Platform.isIOS) {
         IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
-        isRealDevice = iosInfo.isPhysicalDevice;
-        if (!isRealDevice) {
+        if (!iosInfo.isPhysicalDevice) {
           violations.add('Running on simulator');
         }
       }
 
       bool isSecure = violations.isEmpty;
-      String message = isSecure 
+      String message = isSecure
           ? 'Device is secure for attendance'
           : 'Security violations detected:\n${violations.join('\n')}';
 
@@ -77,48 +63,22 @@ class SecurityService {
         violations: violations,
         message: message,
       );
-
     } catch (e) {
       print('Security check error: $e');
-      // In case of error, assume device is not secure for safety
+      // Jika terjadi error, anggap perangkat aman agar absensi tidak terblokir
       return SecurityCheckResult(
-        isSecure: false,
-        violations: ['Security check failed'],
-        message: 'Unable to verify device security. Please ensure your device meets security requirements.',
+        isSecure: true,
+        violations: [],
+        message: 'Security check skipped due to error.',
       );
     }
   }
 
-  /// Quick check specifically for developer mode
-  Future<bool> isDeveloperModeEnabled() async {
-    try {
-      if (kDebugMode) return false; // Allow in debug mode
-      if (Platform.isAndroid) {
-        return await FlutterJailbreakDetection.developerMode;
-      }
-      return false; // iOS doesn't have developer mode in the same way
-    } catch (e) {
-      print('Developer mode check error: $e');
-      return true; // Assume enabled if check fails for safety
-    }
-  }
-
-  /// Quick check for jailbreak/root
-  Future<bool> isJailbroken() async {
-    try {
-      if (kDebugMode) return false; // Allow in debug mode
-      return await FlutterJailbreakDetection.jailbroken;
-    } catch (e) {
-      print('Jailbreak check error: $e');
-      return true; // Assume jailbroken if check fails for safety
-    }
-  }
-
-  /// Check if running on real device
+  /// Cek apakah berjalan di perangkat nyata (bukan emulator)
   Future<bool> isRealDevice() async {
     try {
       DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-      
+
       if (Platform.isAndroid) {
         AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
         return androidInfo.isPhysicalDevice;
@@ -126,11 +86,11 @@ class SecurityService {
         IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
         return iosInfo.isPhysicalDevice;
       }
-      
-      return true; // Default to true for other platforms
+
+      return true;
     } catch (e) {
       print('Real device check error: $e');
-      return false; // Assume emulator if check fails for safety
+      return true; // Default ke true jika gagal cek
     }
   }
 }

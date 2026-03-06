@@ -432,24 +432,29 @@ class _BlogListPageState extends State<BlogListPage> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                       ),
-                      errorWidget: (context, url, error) => Container(
-                        width: 100,
-                        height: 100,
-                        color:
-                            _getCategoryColor(post.category).withValues(alpha: 0.1),
-                        child: Icon(
-                          _getCategoryIcon(post.category),
-                          color: _getCategoryColor(post.category),
-                          size: 40,
-                        ),
-                      ),
+                      errorWidget: (context, url, error) {
+                        // Debug: cetak URL dan error yang terjadi
+                        print('[BLOG IMAGE ERROR] URL: $url');
+                        print('[BLOG IMAGE ERROR] Error: $error');
+                        return Container(
+                          width: 100,
+                          height: 100,
+                          color: _getCategoryColor(post.category)
+                              .withValues(alpha: 0.1),
+                          child: Icon(
+                            _getCategoryIcon(post.category),
+                            color: _getCategoryColor(post.category),
+                            size: 40,
+                          ),
+                        );
+                      },
                     )
                   : Container(
                       width: 100,
                       height: 100,
                       decoration: BoxDecoration(
-                        color:
-                            _getCategoryColor(post.category).withValues(alpha: 0.1),
+                        color: _getCategoryColor(post.category)
+                            .withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
@@ -642,11 +647,15 @@ class _BlogListPageState extends State<BlogListPage> {
   }
 
   String _getImageUrl(String path) {
-    if (path.startsWith('http')) {
-      return path;
-    }
-    final baseUrl = ApiConstants.baseUrl.replaceAll('/api', '');
-    return '$baseUrl/storage/$path';
+    if (path.startsWith('http')) return path;
+
+    // Hapus hanya sufiks '/api' di akhir baseUrl, bukan semua kemunculannya
+    final rawBase = ApiConstants.baseUrl;
+    final storageBase = rawBase.endsWith('/api')
+        ? rawBase.substring(0, rawBase.length - 4)
+        : rawBase;
+
+    return '$storageBase/storage/$path';
   }
 
   Color _getCategoryColor(BlogCategory category) {

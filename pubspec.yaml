@@ -101,6 +101,7 @@ flutter_icons:
   image_path: "assets/icons/ic_launcher/res/mipmap-xxxhdpi/ic_launcher.png"
   remove_alpha_ios: true  # Remove alpha channel for iOS
   background_color: "#016541"  # Hijau HABA untuk menutupi alpha channel iOS
+  image_path_ios: "assets/icons/ic_launcher/res/mipmap-xxxhdpi/ic_launcher.png"
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

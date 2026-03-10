@@ -62,7 +62,16 @@ const AndroidNotificationChannel channel = AndroidNotificationChannel(
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Prevent duplicate Firebase initialization error on iOS (core/duplicate-app)
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (e) {
+    if (e.toString().contains('duplicate-app')) {
+      print('Firebase has already been initialized (likely by iOS native code).');
+    } else {
+      rethrow;
+    }
+  }
 
   // Setup Firebase Messaging
   await _setupFirebaseMessaging();

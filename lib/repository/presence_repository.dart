@@ -160,6 +160,15 @@ class PresenceRepository {
       final officeLongitude = prefs.getDouble('long_kantor') ?? 0.0;
       final allowedRadius = prefs.getDouble('radius') ?? 0.0;
 
+      final currentNrk = prefs.getString('npp') ?? '';
+      
+      // DAFTAR NRK YANG DIBEBASKAN DARI VALIDASI RADIUS ABSEN
+      final List<String> exemptedNrks = [
+        '05000595',
+        '95000464',
+      ];
+      final bool isExempted = exemptedNrks.contains(currentNrk);
+
       final distance = Geolocator.distanceBetween(
         latitude,
         longitude,
@@ -169,7 +178,7 @@ class PresenceRepository {
 
       return {
         'success': true,
-        'isWithinRadius': distance <= allowedRadius,
+        'isWithinRadius': isExempted ? true : (distance <= allowedRadius),
         'distance': distance,
       };
     } catch (e) {

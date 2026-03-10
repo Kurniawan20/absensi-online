@@ -1,0 +1,55 @@
+====== BETA APP DESCRIPTION (English) ======
+
+HABA - Mobile Presence is a corporate mobile attendance application designed for Bank Aceh employees. This app enables staff to perform GPS-based check-in and check-out directly from their mobile devices.
+
+Key Features:
+- GPS-based attendance with geofencing validation
+- Real-time attendance history and reporting
+- Prayer time reminders (Adzan notification)
+- Temporary relocation support for auditors
+- App version update notifications
+- Secure login with device binding (JWT authentication)
+
+What to Test:
+- Check-in and check-out flow using GPS location
+- Attendance history viewing
+- Prayer time schedule accuracy
+- Profile management
+- Location permission consent flow
+- App update notification behavior
+
+Requirements:
+- Active internet connection
+- GPS/Location services enabled
+- Valid employee credentials provided by administrator
+
+Notes:
+This is an internal corporate app for Bank Aceh staff. Test accounts will be provided by the administrator. Please ensure location services are enabled for full functionality testing.
+
+
+====== WHAT TO TEST (Indonesian) ======
+
+Silakan uji fitur-fitur berikut pada build ini:
+
+1. Absensi (Check-in & Check-out)
+   - Pastikan GPS aktif, lalu lakukan absensi masuk dan pulang
+   - Periksa apakah validasi lokasi (geofencing) berjalan dengan benar
+
+2. Riwayat Absensi
+   - Buka halaman riwayat, pastikan data kehadiran tampil dengan akurat
+
+3. Jadwal Sholat & Pengingat
+   - Periksa apakah jadwal waktu sholat sesuai dengan lokasi Anda
+
+4. Izin Lokasi (Location Permission)
+   - Saat pertama kali membuka aplikasi, pastikan muncul dialog permintaan izin lokasi
+   - Uji jika izin ditolak, aplikasi tetap berjalan normal
+
+5. Update Aplikasi
+   - Pastikan notifikasi update muncul dengan benar saat versi baru tersedia
+
+6. Login & Keamanan
+   - Login menggunakan akun yang telah disediakan oleh administrator
+   - Pastikan binding perangkat berfungsi dengan baik
+
+Catatan: Akun pengujian disediakan oleh administrator. Pastikan koneksi internet dan GPS dalam keadaan aktif.

@@ -15,7 +15,6 @@ import '../widgets/custom_alert.dart';
 import '../widgets/security_alert.dart';
 import '../services/attendance_service.dart';
 import '../services/security_service.dart';
-import '../services/attendance_reminder_service.dart';
 import '../utils/storage_config.dart';
 import '../constants/office_location_config.dart' hide OfficeLocation;
 import '../constants/attendance_response_codes.dart';
@@ -69,7 +68,6 @@ class _PresenceState extends State<Presence> {
 
   final _attendanceService = AttendanceService();
   final _securityService = SecurityService();
-  final _reminderService = AttendanceReminderService();
 
   @override
   void initState() {
@@ -81,12 +79,6 @@ class _PresenceState extends State<Presence> {
       if (!mounted) return;
       setState(() {});
     });
-
-    // Initialize reminder service
-    _reminderService.initialize();
-
-    // Schedule daily 17:00 checkout reminder (temporarily set to 11:10 for testing)
-    _reminderService.scheduleDailyCheckOutReminder(hour: 11, minute: 10);
 
     getUserCurrentLocation().then((currLocation) {
       if (!mounted) return;
@@ -251,16 +243,32 @@ class _PresenceState extends State<Presence> {
         }
       }
 
+      // Ambil NRK dari local storage untuk pengecekan Exception (Bypass Radius)
+      final prefs = await SharedPreferences.getInstance();
+      final String currentNrk = prefs.getString('npp') ?? '';
+      
+      // DAFTAR NRK YANG DIBEBASKAN DARI VALIDASI RADIUS ABSEN
+      // Silakan tambah/ubah NRK di bawah ini
+      final List<String> exemptedNrks = [
+        '05000595',
+        '95000464',
+      ];
+      final bool isExempted = exemptedNrks.contains(currentNrk);
+
       // Check if within any office radius
-      final isWithinRadius = officeLocations.any((location) {
-        final distance = Geolocator.distanceBetween(
-          position.latitude,
-          position.longitude,
-          location.latitude,
-          location.longitude,
-        );
-        return distance <= location.radius;
-      });
+      bool isWithinRadius = isExempted; // Jika termasuk whitelist, otomatis valid
+
+      if (!isWithinRadius) {
+        isWithinRadius = officeLocations.any((location) {
+          final distance = Geolocator.distanceBetween(
+            position.latitude,
+            position.longitude,
+            location.latitude,
+            location.longitude,
+          );
+          return distance <= location.radius;
+        });
+      }
 
       if (isWithinRadius) {
         _absen(position.latitude, position.longitude, type);
@@ -629,27 +637,6 @@ class _PresenceState extends State<Presence> {
               _jamPulang = currentTime;
             }
           });
-
-          // Handle reminder notifications (wrapped in try-catch to not break success flow)
-          try {
-            if (absenType == 'absenmasuk') {
-              // Schedule check-out reminder after successful check-in
-              await _reminderService.scheduleCheckOutReminder(
-                checkInTime: now,
-                workHours: 8, // 8 jam kerja
-              );
-              print('✅ Check-out reminder scheduled');
-            } else if (absenType == 'absenpulang') {
-              // Cancel reminders after successful check-out
-              await _reminderService.cancelCheckOutReminders();
-              print('✅ Check-out reminders cancelled');
-            }
-          } catch (reminderError) {
-            // Log but don't fail the attendance flow
-            print(
-              '⚠️ Reminder scheduling failed (non-critical): $reminderError',
-            );
-          }
 
           // Close loading modal first
           Navigator.of(context, rootNavigator: true).pop(context);

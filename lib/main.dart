@@ -131,6 +131,13 @@ Future<void> _setupFirebaseMessaging() async {
     } else {
       print('FCM Token: null (mungkin emulator tanpa Google Play Services)');
     }
+
+    // Set foreground notification presentation for iOS
+    await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
   } catch (e) {
     // Jangan crash app jika FCM tidak tersedia
     print('Firebase Messaging setup warning (non-fatal): $e');

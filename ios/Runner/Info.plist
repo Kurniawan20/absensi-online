@@ -55,5 +55,10 @@
 	<string>Aplikasi memerlukan akses lokasi untuk verifikasi kehadiran Anda di area kantor</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Aplikasi memerlukan akses lokasi untuk verifikasi kehadiran Anda di area kantor</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

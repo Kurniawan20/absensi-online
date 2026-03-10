@@ -194,75 +194,14 @@ class AttendanceReminderService {
 
   /// Schedule daily reminder at 17:00 (5 PM) for check-out
   /// Call this once when the user logs in or app starts
+  /// (FITUR DINONAKTIFKAN SESUAI REQUEST)
+  /// Schedule daily reminder at 17:00 (5 PM) for check-out
   Future<void> scheduleDailyCheckOutReminder({
     int hour = 17,
     int minute = 0,
   }) async {
-    if (!_isInitialized) await initialize();
-
-    // Cancel any existing daily reminder first
-    await cancelDailyCheckOutReminder();
-
-    // Create scheduled time for today at specified hour:minute
-    final now = DateTime.now();
-    var scheduledDate = DateTime(now.year, now.month, now.day, hour, minute);
-
-    // If the time has already passed today, schedule for tomorrow
-    if (scheduledDate.isBefore(now)) {
-      scheduledDate = scheduledDate.add(const Duration(days: 1));
-    }
-
-    final tz.TZDateTime scheduledTZDate =
-        tz.TZDateTime.from(scheduledDate, tz.local);
-
-    const AndroidNotificationDetails androidDetails =
-        AndroidNotificationDetails(
-      'daily_checkout_reminder_channel',
-      'Pengingat Harian Absen Pulang',
-      channelDescription:
-          'Notifikasi pengingat harian untuk absen pulang jam 17:00',
-      importance: Importance.high,
-      priority: Priority.high,
-      icon: '@mipmap/launcher_icon',
-      enableVibration: true,
-      playSound: true,
-    );
-
-    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-      sound: 'default',
-    );
-
-    const NotificationDetails details = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-
-    // Schedule daily repeating notification
-    await _notifications.zonedSchedule(
-      dailyCheckOutReminderId,
-      '🏠 Waktunya Pulang!',
-      'Jangan lupa absen pulang sebelum meninggalkan kantor.',
-      scheduledTZDate,
-      details,
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents:
-          DateTimeComponents.time, // Repeat daily at this time
-      payload: 'daily_checkout_reminder',
-    );
-
-    // Save preference
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('daily_checkout_reminder_enabled', true);
-    await prefs.setInt('daily_checkout_reminder_hour', hour);
-    await prefs.setInt('daily_checkout_reminder_minute', minute);
-
-    print(
-        '✅ Daily check-out reminder scheduled for ${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} every day');
+    // Fitur dinonaktifkan
+    return;
   }
 
   /// Cancel daily check-out reminder

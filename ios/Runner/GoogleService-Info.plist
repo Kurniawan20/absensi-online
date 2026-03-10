@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyDFT6KH2D6q_CziIwhy9nQXSR2_Krnjvcw</string>
+	<string>AIzaSyB6AuTZlGBlrEbo1SA4DbV8EFCD01i72G8</string>
 	<key>GCM_SENDER_ID</key>
-	<string>398639345647</string>
+	<string>646216071747</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
 	<string>com.bas.haba</string>
 	<key>PROJECT_ID</key>
-	<string>absensi-mobile-bc8bc</string>
+	<string>haba-1f47f</string>
 	<key>STORAGE_BUCKET</key>
-	<string>absensi-mobile-bc8bc.appspot.com</string>
+	<string>haba-1f47f.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:398639345647:ios:528052184ad0eb9839d01a</string>
+	<string>1:646216071747:ios:0c41d76b79e0e68e2ab2f6</string>
 </dict>
 </plist>

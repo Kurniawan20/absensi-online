@@ -602,7 +602,8 @@ class _PresenceState extends State<Presence> {
         final String? apiMessage = responseData['message'];
 
         // Extract is_late from API response data
-        final Map<String, dynamic>? apiData = responseData['data'];
+        final dynamic rawData = responseData['data'];
+        final Map<String, dynamic>? apiData = rawData is Map<String, dynamic> ? rawData : null;
         final bool isLateFromApi =
             apiData?['is_late'] == true || apiData?['is_late'] == 1;
         final String? batasJamMasuk = apiData?['batas_jam_masuk'];

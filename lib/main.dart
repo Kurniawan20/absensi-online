@@ -141,6 +141,17 @@ Future<void> _setupFirebaseMessaging() async {
     );
     print('Notification permission status: ${settings.authorizationStatus}');
 
+    // === TAMBAHAN BARU KHUSUS iOS ===
+    if (Platform.isIOS) {
+      print('Menunggu APNs Token dari Apple...');
+      final apnsToken = await FirebaseMessaging.instance.getAPNSToken();
+      if (apnsToken != null) {
+        print('APNs Token berhasil didapat: $apnsToken');
+      } else {
+        print('APNs Token belum didapat dari Apple, FCM mungkin gagal diterima!');
+      }
+    }
+
     // Ambil FCM token (bisa null di emulator tanpa Play Services)
     final fcmToken = await FirebaseMessaging.instance.getToken();
     if (fcmToken != null) {
@@ -170,9 +181,10 @@ Future<void> _setupFirebaseMessaging() async {
     // Trigger notification list refresh
     NotificationRefreshService().triggerRefresh();
 
-    // Show local notification when app is in foreground
+    // Show local notification when app is in foreground (ONLY on Android)
+    // iOS already handles foreground presentation via setForegroundNotificationPresentationOptions
     final notification = message.notification;
-    if (notification != null) {
+    if (notification != null && Platform.isAndroid) {
       flutterLocalNotificationsPlugin.show(
         notification.hashCode,
         notification.title,

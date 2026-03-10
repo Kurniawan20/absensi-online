@@ -41,7 +41,15 @@ class MyHttpOverrides extends HttpOverrides {
 /// Background message handler - must be top-level function
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    if (e.toString().contains('duplicate-app')) {
+      print('Firebase background isolate initialized (by iOS native).');
+    } else {
+      rethrow;
+    }
+  }
   print('Handling background message: ${message.messageId}');
   print('Title: ${message.notification?.title}');
   print('Body: ${message.notification?.body}');

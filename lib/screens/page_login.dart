@@ -22,7 +22,6 @@ import '../services/secure_storage_service.dart';
 import '../services/session_manager.dart';
 import '../services/device_info_service.dart';
 
-import '../utils/storage_config.dart';
 import './reset_device_page.dart';
 
 class Login extends StatefulWidget {
@@ -60,12 +59,17 @@ class _LoginState extends State<Login> {
     _initializeData();
   }
 
+  /// Inisialisasi data awal secara paralel untuk mempercepat loading halaman login
   Future<void> _initializeData() async {
-    await _initAndroidId();
-    await _getUserCurrentLocation();
-    await _initializeBiometric();
-    context.read<LoginBloc>().add(InitializeLoginData());
-    _loadAppVersion();
+    await Future.wait([
+      _initAndroidId(),
+      _getUserCurrentLocation(),
+      _initializeBiometric(),
+    ]);
+    if (mounted) {
+      context.read<LoginBloc>().add(InitializeLoginData());
+      _loadAppVersion();
+    }
   }
 
   Future<void> _loadAppVersion() async {
@@ -578,38 +582,57 @@ class _LoginState extends State<Login> {
   Future<void> _handleSuccessfulLogin() async {
     final email = txtEditEmail.text;
     final password = txtEditPwd.text;
-
-    // Save credentials to SharedPreferences for settings page
     final prefs = await SharedPreferences.getInstance();
+
+    // Simpan kredensial dasar secepat mungkin
     await prefs.setString('email', email);
     await prefs.setString('password', password);
 
-    // Verify token is stored
-    final storage = StorageConfig.secureStorage;
-    final token = await storage.read(key: 'auth_token');
-    print('\n=== Token Check After Login ===');
-    print('Token present: ${token != null}');
-    if (token == null) {
-      print('Warning: Token not found after login!');
-      print('Checking all stored items:');
-      final allItems = await storage.readAll();
-      print('All stored items: $allItems');
-    } else {
-      print('Token found with length: ${token.length}');
-    }
+    // Inisialisasi session
+    SessionManager.initializeSession();
 
-    // If biometric is enabled, check if we need to update credentials
-    final isBiometricEnabled = await _secureStorage.isBiometricEnabled();
-    if (isBiometricEnabled) {
-      final currentCredentials = await _secureStorage.getCredentials();
-      final isNewUser =
-          currentCredentials == null || currentCredentials['email'] != email;
+    // Langsung navigasi ke halaman utama agar transisi terasa smooth
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const MainLayout(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          // Animasi fade yang ringan dan smooth
+          return FadeTransition(
+            opacity: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOut,
+            ),
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 250),
+      ),
+    );
 
-      if (isNewUser) {
-        print('Updating biometric credentials for new user');
+    // Jalankan proses berat di background setelah navigasi selesai
+    _runPostLoginTasksInBackground(email, password, prefs);
+  }
+
+  /// Tugas-tugas pasca login yang dijalankan secara async di background
+  /// agar tidak menghalangi animasi transisi ke halaman utama.
+  Future<void> _runPostLoginTasksInBackground(
+    String email,
+    String password,
+    SharedPreferences prefs,
+  ) async {
+    try {
+      // Perbarui kredensial biometric jika sudah diaktifkan
+      final isBiometricEnabled = await _secureStorage.isBiometricEnabled();
+      if (isBiometricEnabled) {
+        final currentCredentials = await _secureStorage.getCredentials();
+        final isNewUser =
+            currentCredentials == null || currentCredentials['email'] != email;
         await _secureStorage.saveCredentials(email, password);
 
-        if (mounted) {
+        if (isNewUser && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Login biometric telah diperbarui'),
@@ -622,98 +645,12 @@ class _LoginState extends State<Login> {
             ),
           );
         }
-      } else {
-        // Still save credentials but don't show message
-        await _secureStorage.saveCredentials(email, password);
       }
-    }
 
-    // Only show biometric prompt on fresh install
-    if (mounted) {
-      final isInitialized = await _secureStorage.isAppInitialized();
-      final isEnabled = await _secureStorage.isBiometricEnabled();
-      final isBiometricAvailable =
-          await _biometricService.isBiometricAvailable();
-      final biometrics = await _biometricService.getAvailableBiometrics();
-
-      print('Login check:');
-      print('- App initialized: $isInitialized');
-      print('- Biometric enabled: $isEnabled');
-      print('- Biometric available: $isBiometricAvailable');
-      print('- Has biometrics: ${biometrics.isNotEmpty}');
-
-      // Only show prompt if:
-      // 1. App is not initialized (fresh install)
-      // 2. Biometric is available and not already enabled
-      if (!isInitialized &&
-          !isEnabled &&
-          isBiometricAvailable &&
-          biometrics.isNotEmpty) {
-        // Show prompt to enable biometric
-        final shouldEnable = await showDialog<bool>(
-              context: context,
-              barrierDismissible: false,
-              builder: (BuildContext context) {
-                return AlertDialog(
-                  title: const Text('Aktifkan Login Biometric'),
-                  content: const Text(
-                      'Perangkat Anda mendukung login dengan Biometric. '
-                      'Apakah Anda ingin mengaktifkan fitur ini untuk login lebih cepat?'),
-                  actions: <Widget>[
-                    TextButton(
-                      child: const Text('Tidak'),
-                      onPressed: () => Navigator.of(context).pop(false),
-                    ),
-                    TextButton(
-                      child: const Text(
-                        'Aktifkan',
-                        style: TextStyle(
-                          color: Color.fromRGBO(1, 101, 65, 1),
-                        ),
-                      ),
-                      onPressed: () => Navigator.of(context).pop(true),
-                    ),
-                  ],
-                );
-              },
-            ) ??
-            false;
-
-        if (shouldEnable) {
-          await _secureStorage.setBiometricEnabled(true);
-          await _secureStorage.saveCredentials(email, password);
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Login  biometrik telah diaktifkan'),
-                backgroundColor: Color.fromRGBO(1, 101, 65, 1),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(10)),
-                ),
-                margin: EdgeInsets.all(10),
-              ),
-            );
-          }
-        }
-      }
-    }
-
-    // Initialize session manager for new login
-    SessionManager.initializeSession();
-
-    // Register FCM token for push notifications
-    await _registerFcmToken(prefs);
-
-    // Navigate to main layout
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const MainLayout(),
-        ),
-      );
+      // Register FCM token
+      await _registerFcmToken(prefs);
+    } catch (e) {
+      print('Background login tasks error (non-blocking): $e');
     }
   }
 

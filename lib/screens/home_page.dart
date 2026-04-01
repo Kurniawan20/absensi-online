@@ -17,14 +17,12 @@ import '../widgets/skeleton_text.dart';
 import 'page_rekap_absensi.dart';
 import 'package:intl/intl.dart';
 
-import '../painters/islamic_arch_painter.dart';
 import '../services/attendance_service.dart';
 import '../utils/storage_config.dart';
 import '../services/avatar_service.dart';
+import '../painters/geometric_pattern_painter.dart';
 
 import '../constants/api_constants.dart';
-import '../services/prayer_time_service.dart';
-import '../models/prayer_times.dart';
 
 extension StringCasingExtension on String {
   String toTitleCase() => split(' ')
@@ -34,37 +32,6 @@ extension StringCasingExtension on String {
             : '',
       )
       .join(' ');
-}
-
-class GeometricPatternPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.1)
-      ..style = PaintingStyle.fill;
-
-    // Create overlapping rectangles
-    var path1 = Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width * 0.7, 0)
-      ..lineTo(size.width * 0.5, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-
-    var path2 = Path()
-      ..moveTo(size.width * 0.5, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width * 0.8, size.height)
-      ..lineTo(size.width * 0.3, size.height)
-      ..close();
-
-    // Draw the paths with different opacities
-    canvas.drawPath(path1, paint..color = Colors.black.withValues(alpha: 0.05));
-    canvas.drawPath(path2, paint..color = Colors.black.withValues(alpha: 0.07));
-  }
-
-  @override
-  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
 
 class HomePage extends StatefulWidget {
@@ -79,9 +46,6 @@ class _HomeScreenState extends State<HomePage> {
   bool _isLoadingAttendance = true;
   bool _isLoadingBlogs = true;
   bool _isLoadingWorkingHours = true;
-  bool _isLoadingPrayer = true;
-  PrayerTimes? _prayerTimes;
-  final PrayerTimeService _prayerTimeService = PrayerTimeService();
   String userName = '';
   String? userNpp;
   String? jamMasuk;
@@ -95,17 +59,15 @@ class _HomeScreenState extends State<HomePage> {
   final _attendanceService = AttendanceService();
   final storage = StorageConfig.secureStorage;
 
-  String _getGreeting() {
-    var hour = DateTime.now().hour;
-    if (hour < 12) {
-      return 'Selamat Pagi';
-    } else if (hour < 15) {
-      return 'Selamat Siang';
-    } else if (hour < 18) {
-      return 'Selamat Sore';
-    } else {
-      return 'Selamat Malam';
-    }
+  // Salam berdasarkan jam — di-cache sekali di initState agar tidak dihitung setiap build()
+  late String _greeting;
+
+  String _computeGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Selamat Pagi';
+    if (hour < 15) return 'Selamat Siang';
+    if (hour < 18) return 'Selamat Sore';
+    return 'Selamat Malam';
   }
 
   // Avatar service instance for listening to changes
@@ -117,13 +79,12 @@ class _HomeScreenState extends State<HomePage> {
   void initState() {
     super.initState();
 
+    _greeting = _computeGreeting();
     _loadUserData();
     _loadTodayAttendance();
     _loadSelectedAvatar();
     _loadBlogPosts();
     _loadWorkingHours();
-    _loadPrayerTimes();
-
     // Add listener to attendance service
     _attendanceService.addListener(_loadTodayAttendance);
 
@@ -163,7 +124,6 @@ class _HomeScreenState extends State<HomePage> {
       _loadTodayAttendance(),
       _loadBlogPosts(),
       _loadWorkingHours(),
-      _loadPrayerTimes(),
     ]);
   }
 
@@ -191,7 +151,7 @@ class _HomeScreenState extends State<HomePage> {
                   children: [
                     Positioned.fill(
                       child: CustomPaint(
-                        painter: IslamicArchPainter(),
+                        painter: GeometricPatternPainter(),
                       ),
                     ),
                     // Notification Icon
@@ -294,7 +254,7 @@ class _HomeScreenState extends State<HomePage> {
                                     fontWeight: FontWeight.w500,
                                   ),
                                   children: [
-                                    TextSpan(text: '${_getGreeting()}, '),
+                                    TextSpan(text: '$_greeting, '),
                                     const TextSpan(text: '👋'),
                                   ],
                                 ),
@@ -513,9 +473,6 @@ class _HomeScreenState extends State<HomePage> {
                 ),
               ),
               const SizedBox(height: 5),
-              // Jadwal Sholat Section
-              _buildPrayerScheduleCard(),
-              const SizedBox(height: 5),
               // Blog/Announcement Section
               _buildBlogSection(),
             ],
@@ -614,58 +571,45 @@ class _HomeScreenState extends State<HomePage> {
           isDisabled ? Colors.transparent : color.withValues(alpha: 0.05),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
-        width: (MediaQuery.of(context).size.width - 48) /
-            4, // Dynamic width: (Screen - Padding) / 4
-        child: TweenAnimationBuilder<double>(
-          duration: const Duration(milliseconds: 200),
-          tween: Tween<double>(begin: 1, end: 1),
-          builder: (context, value, child) {
-            return Transform.scale(
-              scale: value,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: backgroundColor,
-                      borderRadius: BorderRadius.circular(
-                        18,
-                      ), // Slightly more rounded
-                      boxShadow: isDisabled
-                          ? []
-                          : [
-                              BoxShadow(
-                                color: color.withValues(alpha: 0.3),
-                                blurRadius: 12,
-                                offset: const Offset(0, 6),
-                                spreadRadius: -2,
-                              ),
-                            ],
-                    ),
-                    child: Icon(icon, color: iconColor, size: 26),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 12,
-                      color: textColor,
-                      fontWeight: fontWeight,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ],
+        width: (MediaQuery.of(context).size.width - 48) / 4,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: backgroundColor,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: isDisabled
+                    ? []
+                    : [
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                          spreadRadius: -2,
+                        ),
+                      ],
               ),
-            );
-          },
-          onEnd: () {},
+              child: Icon(icon, color: iconColor, size: 26),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 12,
+                color: textColor,
+                fontWeight: fontWeight,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -734,231 +678,6 @@ class _HomeScreenState extends State<HomePage> {
     }
   }
 
-  // ==================== PRAYER SCHEDULE METHODS ====================
-
-  /// Ambil jadwal sholat dari Aladhan API
-  Future<void> _loadPrayerTimes() async {
-    try {
-      final prayerTimes = await _prayerTimeService.getTodayPrayerTimes();
-      if (!mounted) return;
-      setState(() {
-        _prayerTimes = prayerTimes;
-        _isLoadingPrayer = false;
-      });
-    } catch (e) {
-      print('Error loading prayer times: $e');
-      if (!mounted) return;
-      setState(() {
-        _isLoadingPrayer = false;
-      });
-    }
-  }
-
-  /// Widget card jadwal sholat
-  Widget _buildPrayerScheduleCard() {
-    return Container(
-      decoration: const BoxDecoration(color: Colors.white),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header: Icon + Title + Hijriyah date
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color.fromRGBO(1, 101, 65, 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.mosque_rounded,
-                    color: Color.fromRGBO(1, 101, 65, 1),
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Jadwal Sholat',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      if (!_isLoadingPrayer && _prayerTimes != null)
-                        Text(
-                          _prayerTimes!.formattedHijriDate,
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 12,
-                            color: Colors.grey[500],
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                // Badge sholat berikutnya
-                if (!_isLoadingPrayer && _prayerTimes != null)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color.fromRGBO(1, 101, 65, 1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.access_time_rounded,
-                          color: Colors.white,
-                          size: 14,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${_prayerTimes!.nextPrayerName} ${_prayerTimes!.nextPrayerTime}',
-                          style: const TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            // Loading state
-            if (_isLoadingPrayer)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-              )
-            // Error state
-            else if (_prayerTimes == null)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Text(
-                        'Gagal memuat jadwal sholat',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 13,
-                          color: Colors.grey[500],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextButton.icon(
-                        onPressed: () {
-                          setState(() => _isLoadingPrayer = true);
-                          _loadPrayerTimes();
-                        },
-                        icon: const Icon(Icons.refresh, size: 18),
-                        label: const Text(
-                          'Coba Lagi',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 13,
-                          ),
-                        ),
-                        style: TextButton.styleFrom(
-                          foregroundColor: const Color.fromRGBO(1, 101, 65, 1),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            // Daftar waktu sholat
-            else
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: _prayerTimes!.displayPrayers.map((prayer) {
-                  final isNext = prayer['name'] == _prayerTimes!.nextPrayerName;
-                  return _buildPrayerTimeItem(
-                    name: prayer['name']!,
-                    time: prayer['time']!,
-                    isNext: isNext,
-                  );
-                }).toList(),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Widget item waktu sholat individual
-  Widget _buildPrayerTimeItem({
-    required String name,
-    required String time,
-    bool isNext = false,
-  }) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          decoration: BoxDecoration(
-            color: isNext
-                ? const Color.fromRGBO(1, 101, 65, 0.1)
-                : Colors.grey[50],
-            borderRadius: BorderRadius.circular(10),
-            border: isNext
-                ? Border.all(
-                    color: const Color.fromRGBO(1, 101, 65, 0.3),
-                    width: 1,
-                  )
-                : null,
-          ),
-          child: Column(
-            children: [
-              Text(
-                time,
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: isNext ? FontWeight.w700 : FontWeight.w600,
-                  color: isNext
-                      ? const Color.fromRGBO(1, 101, 65, 1)
-                      : Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                name,
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 11,
-                  fontWeight: isNext ? FontWeight.w500 : FontWeight.w400,
-                  color: isNext
-                      ? const Color.fromRGBO(1, 101, 65, 1)
-                      : Colors.grey[600],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   // ==================== BLOG METHODS ====================
 
   Future<void> _loadBlogPosts() async {
@@ -968,7 +687,7 @@ class _HomeScreenState extends State<HomePage> {
     });
 
     try {
-      final posts = await _homeRepository.getBlogPosts(limit: 10);
+      final posts = await _homeRepository.getBlogPosts(limit: 5);
       if (!mounted) return;
 
       // Sort posts: pinned first, then by published date
@@ -1009,36 +728,56 @@ class _HomeScreenState extends State<HomePage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Pengumuman Kantor',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black,
-                    fontFamily: 'Poppins',
-                  ),
-                ),
-                if (_blogPosts.length >= 5)
-                  GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const BlogListPage(),
-                        ),
-                      );
-                    },
-                    child: Text(
-                      'Lihat Semua',
+                const Row(
+                  children: [
+                    Text(
+                      'Pengumuman',
                       style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: const Color.fromRGBO(1, 101, 65, 1),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black,
                         fontFamily: 'Poppins',
                       ),
                     ),
+                    SizedBox(width: 8),
+                    Icon(
+                      Icons.campaign_rounded,
+                      size: 22,
+                      color: Color.fromRGBO(1, 101, 65, 1),
+                    ),
+                  ],
+                ),
+                GestureDetector(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const BlogListPage(),
+                      ),
+                    );
+                  },
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Lihat Semua',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color.fromRGBO(1, 101, 65, 1),
+                          fontFamily: 'Poppins',
+                        ),
+                      ),
+                      SizedBox(width: 4),
+                      Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 14,
+                        color: Color.fromRGBO(1, 101, 65, 1),
+                      ),
+                    ],
                   ),
+                ),
               ],
             ),
             const SizedBox(height: 8),

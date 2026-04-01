@@ -44,8 +44,8 @@ class AvatarService extends ChangeNotifier {
     return availableAvatars.where((a) => a['gender'] == gender).toList();
   }
 
-  // Default avatar (Ramadhan: gunakan avatar berpeci)
-  static const String defaultAvatar = 'assets/images/avatar_male_2.png';
+  // Default avatar
+  static const String defaultAvatar = 'assets/images/avatar_male.png';
 
   // Current selected avatar (cached)
   String _currentAvatar = defaultAvatar;

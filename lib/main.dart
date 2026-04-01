@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -8,7 +9,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'bloc/login/login_bloc.dart';
 import 'services/notification_refresh_service.dart';
-
 import 'repository/login_repository.dart';
 import 'bloc/presence/presence_bloc.dart';
 import 'repository/presence_repository.dart';
@@ -25,7 +25,6 @@ import 'bloc/app_version/app_version_bloc.dart';
 import 'repository/app_version_repository.dart';
 import 'bloc/device_reset/device_reset_bloc.dart';
 import 'repository/device_reset_repository.dart';
-
 import 'screens/page_splashscreen.dart';
 import 'firebase_options.dart';
 
@@ -38,28 +37,23 @@ class MyHttpOverrides extends HttpOverrides {
   }
 }
 
-/// Background message handler - must be top-level function
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
     await Firebase.initializeApp();
   } catch (e) {
     if (e.toString().contains('duplicate-app')) {
-      print('Firebase background isolate initialized (by iOS native).');
+      if (kDebugMode) print('Firebase background: duplicate-app ignored.');
     } else {
       rethrow;
     }
   }
-  print('Handling background message: ${message.messageId}');
-  print('Title: ${message.notification?.title}');
-  print('Body: ${message.notification?.body}');
+  if (kDebugMode) print('Background message: ');
 }
 
-/// Flutter Local Notifications plugin instance
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
-/// Android notification channel for high importance notifications
 const AndroidNotificationChannel channel = AndroidNotificationChannel(
   'high_importance_channel',
   'High Importance Notifications',
@@ -70,119 +64,76 @@ const AndroidNotificationChannel channel = AndroidNotificationChannel(
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = MyHttpOverrides();
-  // Prevent duplicate Firebase initialization error on iOS (core/duplicate-app)
+
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   } catch (e) {
     if (e.toString().contains('duplicate-app')) {
-      print('Firebase has already been initialized (likely by iOS native code).');
+      if (kDebugMode) print('Firebase already initialized.');
     } else {
       rethrow;
     }
   }
 
-  // Setup Firebase Messaging
   await _setupFirebaseMessaging();
 
   final prefs = await SharedPreferences.getInstance();
-  final appVersionRepository = AppVersionRepository();
-  final loginRepository = LoginRepository();
-  final presenceRepository = PresenceRepository();
-  final homeRepository = HomeRepository();
-  final attendanceRecapRepository = AttendanceRecapRepository();
-  final notificationRepository = NotificationRepository(preferences: prefs);
-  final leaveRepository = LeaveRepository();
-  final deviceResetRepository = DeviceResetRepository();
 
   runApp(
     MyApp(
-      appVersionRepository: appVersionRepository,
-      loginRepository: loginRepository,
-      presenceRepository: presenceRepository,
-      homeRepository: homeRepository,
-      attendanceRecapRepository: attendanceRecapRepository,
-      notificationRepository: notificationRepository,
-      leaveRepository: leaveRepository,
-      deviceResetRepository: deviceResetRepository,
+      appVersionRepository: AppVersionRepository(),
+      loginRepository: LoginRepository(),
+      presenceRepository: PresenceRepository(),
+      homeRepository: HomeRepository(),
+      attendanceRecapRepository: AttendanceRecapRepository(),
+      notificationRepository: NotificationRepository(preferences: prefs),
+      leaveRepository: LeaveRepository(),
+      deviceResetRepository: DeviceResetRepository(),
     ),
   );
 }
 
-/// Setup Firebase Messaging for push notifications
 Future<void> _setupFirebaseMessaging() async {
-  // Set the background messaging handler
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  // Create the Android notification channel
   await flutterLocalNotificationsPlugin
       .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>()
       ?.createNotificationChannel(channel);
 
-  // Initialize local notifications
   const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
   const iosSettings = DarwinInitializationSettings(
     requestAlertPermission: true,
     requestBadgePermission: true,
     requestSoundPermission: true,
   );
-  const initSettings = InitializationSettings(
-    android: androidSettings,
-    iOS: iosSettings,
+  await flutterLocalNotificationsPlugin.initialize(
+    const InitializationSettings(android: androidSettings, iOS: iosSettings),
   );
-  await flutterLocalNotificationsPlugin.initialize(initSettings);
 
-  // Minta izin notifikasi (graceful - tidak crash jika gagal)
   try {
     final settings = await FirebaseMessaging.instance.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
+      alert: true, badge: true, sound: true,
     );
-    print('Notification permission status: ${settings.authorizationStatus}');
+    if (kDebugMode) {
+      print('Notification permission: ${settings.authorizationStatus}');
+    }
 
-    // === TAMBAHAN BARU KHUSUS iOS ===
     if (Platform.isIOS) {
-      print('Menunggu APNs Token dari Apple...');
       final apnsToken = await FirebaseMessaging.instance.getAPNSToken();
-      if (apnsToken != null) {
-        print('APNs Token berhasil didapat: $apnsToken');
-      } else {
-        print('APNs Token belum didapat dari Apple, FCM mungkin gagal diterima!');
-      }
+      if (kDebugMode) print(apnsToken != null ? 'APNs Token: OK' : 'APNs Token: null');
     }
 
-    // Ambil FCM token (bisa null di emulator tanpa Play Services)
-    final fcmToken = await FirebaseMessaging.instance.getToken();
-    if (fcmToken != null) {
-      print('Current FCM Token: ${fcmToken.substring(0, 30)}...');
-    } else {
-      print('FCM Token: null (mungkin emulator tanpa Google Play Services)');
-    }
-
-    // Set foreground notification presentation for iOS
     await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
-      alert: true,
-      badge: true,
-      sound: true,
+      alert: true, badge: true, sound: true,
     );
   } catch (e) {
-    // Jangan crash app jika FCM tidak tersedia
-    print('Firebase Messaging setup warning (non-fatal): $e');
+    if (kDebugMode) print('FCM setup warning: ');
   }
 
-  // Handle foreground messages
   FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-    print('=== Foreground Message Received ===');
-    print('Title: ${message.notification?.title}');
-    print('Body: ${message.notification?.body}');
-    print('Data: ${message.data}');
-
-    // Trigger notification list refresh
+    if (kDebugMode) print('Foreground: ');
     NotificationRefreshService().triggerRefresh();
-
-    // Show local notification when app is in foreground (ONLY on Android)
-    // iOS already handles foreground presentation via setForegroundNotificationPresentationOptions
     final notification = message.notification;
     if (notification != null && Platform.isAndroid) {
       flutterLocalNotificationsPlugin.show(
@@ -191,17 +142,13 @@ Future<void> _setupFirebaseMessaging() async {
         notification.body,
         NotificationDetails(
           android: AndroidNotificationDetails(
-            channel.id,
-            channel.name,
+            channel.id, channel.name,
             channelDescription: channel.description,
             icon: '@mipmap/ic_launcher',
-            importance: Importance.high,
-            priority: Priority.high,
+            importance: Importance.high, priority: Priority.high,
           ),
           iOS: const DarwinNotificationDetails(
-            presentAlert: true,
-            presentBadge: true,
-            presentSound: true,
+            presentAlert: true, presentBadge: true, presentSound: true,
           ),
         ),
         payload: message.data.toString(),
@@ -209,26 +156,15 @@ Future<void> _setupFirebaseMessaging() async {
     }
   });
 
-  // Handle notification tap when app was in background
   FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-    print('=== Notification Tapped (from background) ===');
-    print('Data: ${message.data}');
-
-    // Trigger notification list refresh
+    if (kDebugMode) print('Notification tapped: ');
     NotificationRefreshService().triggerRefresh();
-
-    // Navigation will be handled by the app based on message.data
   });
 
-  // Check if app was opened from a terminated state via notification
   final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
-  if (initialMessage != null) {
-    print('=== App opened from terminated state via notification ===');
-    print('Data: ${initialMessage.data}');
-    // Navigation will be handled by the app based on initialMessage.data
+  if (initialMessage != null && kDebugMode) {
+    print('Opened from terminated state: ');
   }
-
-  print('Firebase Messaging setup complete');
 }
 
 class MyApp extends StatelessWidget {
@@ -257,39 +193,20 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
-        BlocProvider(
-          create: (context) => AppVersionBloc(repository: appVersionRepository),
-        ),
-        BlocProvider(
-          create: (context) => LoginBloc(loginRepository: loginRepository),
-        ),
-        BlocProvider(
-          create: (context) =>
-              PresenceBloc(presenceRepository: presenceRepository),
-        ),
-        BlocProvider(
-          create: (context) => HomeBloc(homeRepository: homeRepository),
-        ),
-        BlocProvider(
-          create: (context) =>
-              AttendanceRecapBloc(repository: attendanceRecapRepository),
-        ),
+        BlocProvider(create: (context) => AppVersionBloc(repository: appVersionRepository)),
+        BlocProvider(create: (context) => LoginBloc(loginRepository: loginRepository)),
+        BlocProvider(create: (context) => PresenceBloc(presenceRepository: presenceRepository)),
+        BlocProvider(create: (context) => HomeBloc(homeRepository: homeRepository)),
+        BlocProvider(create: (context) => AttendanceRecapBloc(repository: attendanceRecapRepository)),
         BlocProvider(
           create: (context) {
-            final bloc = NotificationBloc(
-              notificationRepository: notificationRepository,
-            );
+            final bloc = NotificationBloc(notificationRepository: notificationRepository);
             bloc.add(InitializeNotifications());
             return bloc;
           },
         ),
-        BlocProvider(
-          create: (context) => LeaveBloc(leaveRepository: leaveRepository),
-        ),
-        BlocProvider(
-          create: (context) =>
-              DeviceResetBloc(repository: deviceResetRepository),
-        ),
+        BlocProvider(create: (context) => LeaveBloc(leaveRepository: leaveRepository)),
+        BlocProvider(create: (context) => DeviceResetBloc(repository: deviceResetRepository)),
       ],
       child: MaterialApp(
         title: 'Monitoring Project',
@@ -305,25 +222,15 @@ class MyApp extends StatelessWidget {
         ],
         theme: ThemeData(
           primaryColor: const Color.fromRGBO(1, 101, 65, 1),
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color.fromRGBO(1, 101, 65, 1),
-          ),
+          colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromRGBO(1, 101, 65, 1)),
           inputDecorationTheme: InputDecorationTheme(
             floatingLabelBehavior: FloatingLabelBehavior.auto,
-            floatingLabelStyle: const TextStyle(
-              color: Color.fromRGBO(1, 101, 65, 1),
-            ),
+            floatingLabelStyle: const TextStyle(color: Color.fromRGBO(1, 101, 65, 1)),
             labelStyle: TextStyle(color: Colors.grey[600]),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 25,
-              vertical: 25,
-            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 25, vertical: 25),
             border: InputBorder.none,
           ),
-          appBarTheme: const AppBarTheme(
-            backgroundColor: Color(0xFF016541),
-            elevation: 0,
-          ),
+          appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF016541), elevation: 0),
         ),
         home: const SplashScreen(),
       ),

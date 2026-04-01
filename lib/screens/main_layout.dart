@@ -24,6 +24,10 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   int _selectedIndex = 0;
+
+  // Lazy tab loading: tab hanya di-build saat pertama kali dikunjungi
+  final List<bool> _tabVisited = [true, false, false];
+
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
   StreamSubscription<void>? _notificationRefreshSubscription;
@@ -184,10 +188,10 @@ class _MainLayoutState extends State<MainLayout>
   ];
 
   void _onItemTapped(int index) {
-    // Update session activity on user interaction
     SessionManager.updateActivity();
-
     setState(() {
+      // Tandai tab sebagai sudah dikunjungi agar mulai di-build
+      _tabVisited[index] = true;
       _fadeController.reverse().then((_) {
         setState(() {
           _selectedIndex = index;
@@ -204,7 +208,11 @@ class _MainLayoutState extends State<MainLayout>
         opacity: _fadeAnimation,
         child: IndexedStack(
           index: _selectedIndex,
-          children: _pages,
+          children: List.generate(
+            _pages.length,
+            // Render SizedBox kosong untuk tab yang belum pernah dikunjungi
+            (i) => _tabVisited[i] ? _pages[i] : const SizedBox.shrink(),
+          ),
         ),
       ),
       bottomNavigationBar: Container(

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -264,13 +265,10 @@ class NotificationRepository {
       final token = await _secureStorage.getToken();
       final deviceType = Platform.isAndroid ? 'android' : 'ios';
 
-      print('=== FCM Token Registration API Call ===');
-      print('URL: ${ApiConstants.fcmRegister}');
-      print('NPP: $npp');
-      print('FCM Token: ${fcmToken.substring(0, 20)}...');
-      print('Device Type: $deviceType');
-      print('Device ID: $deviceId');
-      print('Auth Token present: ${token != null}');
+      if (kDebugMode) {
+        print('=== FCM Token Registration ===');
+        print('NPP: $npp | Device: $deviceType | Auth: ${token != null}');
+      }
 
       final response = await _client.post(
         Uri.parse(ApiConstants.fcmRegister),
@@ -287,24 +285,18 @@ class NotificationRepository {
         }),
       );
 
-      print('FCM Register Response Status: ${response.statusCode}');
-      print('FCM Register Response Body: ${response.body}');
+      if (kDebugMode) print('FCM Register: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['rcode'] == '00') {
-          print('FCM Token registered successfully!');
-        } else {
-          print('FCM Token registration failed: ${data['message']}');
+        if (data['rcode'] != '00') {
           throw Exception(data['message'] ?? 'Failed to register FCM token');
         }
       } else {
-        print(
-            'FCM Token registration failed with status: ${response.statusCode}');
         throw Exception('Failed to register FCM token: ${response.statusCode}');
       }
     } catch (e) {
-      print('FCM Token registration error: $e');
+      if (kDebugMode) print('FCM registration error: $e');
       throw Exception('Error registering FCM token: $e');
     }
   }

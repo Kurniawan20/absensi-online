@@ -5,7 +5,7 @@ import './page_login.dart';
 import './settings_page.dart';
 import '../utils/storage_config.dart';
 import '../services/avatar_service.dart';
-import '../painters/islamic_arch_painter.dart';
+import '../painters/geometric_pattern_painter.dart';
 
 class Profile extends StatefulWidget {
   const Profile({super.key});
@@ -234,7 +234,7 @@ class _ProfileState extends State<Profile> {
                 children: [
                   Positioned.fill(
                     child: CustomPaint(
-                      painter: IslamicArchPainter(),
+                      painter: GeometricPatternPainter(),
                     ),
                   ),
                   Positioned.fill(

@@ -484,27 +484,15 @@ class _HomeScreenState extends State<HomePage> {
 
   void _onKehadiranTap() async {
     try {
-      // Show loading dialog
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext context) {
-          return const Center(child: CircularProgressIndicator());
-        },
-      );
-
-      // Get token and NPP
+      // Langsung ambil token dan NPP, tidak perlu loading spinner 
+      // karena akses SharedPreferences/SecureStorage berlangsung instan
       final token = await storage.read(key: 'auth_token');
       final prefs = await SharedPreferences.getInstance();
       final npp = prefs.getString('npp');
 
-      // Pop loading dialog
-      if (Navigator.canPop(context)) {
-        Navigator.pop(context);
-      }
+      if (!mounted) return;
 
       if (token == null) {
-        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Sesi anda telah berakhir. Silakan login kembali.'),
@@ -515,7 +503,6 @@ class _HomeScreenState extends State<HomePage> {
       }
 
       // Navigate to RekapAbsensi
-      if (!mounted) return;
       Navigator.of(context).push(
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) {
@@ -528,11 +515,6 @@ class _HomeScreenState extends State<HomePage> {
         ),
       );
     } catch (e) {
-      // Pop loading dialog if it's still showing
-      if (Navigator.canPop(context)) {
-        Navigator.pop(context);
-      }
-
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -822,44 +804,32 @@ class _HomeScreenState extends State<HomePage> {
           ),
           child: Row(
             children: [
-              Container(
+              const SkeletonText(
                 width: 80,
                 height: 80,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                borderRadius: 8,
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
+                  children: const [
+                    SkeletonText(
                       height: 16,
                       width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(4),
-                      ),
+                      borderRadius: 4,
                     ),
-                    const SizedBox(height: 8),
-                    Container(
+                    SizedBox(height: 8),
+                    SkeletonText(
                       height: 12,
                       width: 150,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(4),
-                      ),
+                      borderRadius: 4,
                     ),
-                    const SizedBox(height: 8),
-                    Container(
+                    SizedBox(height: 8),
+                    SkeletonText(
                       height: 12,
                       width: 100,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(4),
-                      ),
+                      borderRadius: 4,
                     ),
                   ],
                 ),

@@ -1,11 +1,16 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import './page_login.dart';
 import './settings_page.dart';
+import './camera_capture_screen.dart';
+import '../constants/api_constants.dart';
 import '../utils/storage_config.dart';
 import '../services/avatar_service.dart';
 import '../painters/geometric_pattern_painter.dart';
+import '../widgets/custom_alert.dart';
 
 class Profile extends StatefulWidget {
   const Profile({super.key});
@@ -174,6 +179,96 @@ class _ProfileState extends State<Profile> {
         ),
       ),
     );
+  }
+
+  Future<void> _registerFace() async {
+    final base64Image = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CameraCaptureScreen()),
+    );
+
+    if (base64Image != null && base64Image is String && mounted) {
+      bool isLoadingVisible = false;
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const CustomLoadingAlert(
+          message: 'Mendaftarkan Wajah...',
+        ),
+      );
+      isLoadingVisible = true;
+
+      try {
+        final storage = StorageConfig.secureStorage;
+        final token = await storage.read(key: 'auth_token');
+        final currentNpp = npp;
+
+        if (token == null || currentNpp == null) {
+          throw Exception('Token atau NPP tidak valid');
+        }
+
+        final response = await http.post(
+          Uri.parse(ApiConstants.faceRegister),
+          headers: <String, String>{
+            'Content-Type': 'application/json; charset=UTF-8',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode(<String, dynamic>{
+            // Python service menggunakan field 'user_id'
+            'user_id': currentNpp,
+            'image': base64Image,
+          }),
+        ).timeout(const Duration(seconds: 20));
+
+        // Tutup loading
+        if (mounted && isLoadingVisible) {
+          Navigator.pop(context);
+          isLoadingVisible = false;
+        }
+
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          final responseData = jsonDecode(response.body);
+          // Python service mengembalikan 'success: true' jika berhasil
+          if (responseData['success'] == true) {
+            if (mounted) {
+              showDialog(
+                context: context,
+                builder: (context) => const CustomAlert(
+                  title: 'Berhasil',
+                  message: 'Pendaftaran wajah berhasil disimpan.',
+                  icon: Icons.check_circle_rounded,
+                  iconColor: Color.fromRGBO(1, 101, 65, 1),
+                ),
+              );
+            }
+          } else {
+            throw Exception(responseData['message'] ?? 'Gagal mendaftarkan wajah');
+          }
+        } else {
+          // Tampilkan status code agar lebih mudah debug
+          final body = response.body.length > 200
+              ? response.body.substring(0, 200)
+              : response.body;
+          throw Exception('Error ${response.statusCode}: $body');
+        }
+      } catch (e) {
+        if (mounted) {
+          if (isLoadingVisible) {
+            Navigator.pop(context);
+          }
+          showDialog(
+            context: context,
+            builder: (context) => CustomAlert(
+              title: 'Gagal',
+              message: e.toString().replaceAll('Exception:', '').trim(),
+              icon: Icons.warning_amber_rounded,
+              iconColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
   }
 
   Future<void> signOut() async {
@@ -398,6 +493,33 @@ class _ProfileState extends State<Profile> {
                     ),
                   ),
                   const Divider(height: 1),
+                  // [HIDDEN] Menu Pendaftaran Wajah — aktifkan dengan ubah offstage: false
+                  Offstage(
+                    offstage: true,
+                    child: Column(
+                      children: [
+                        ListTile(
+                          leading: const Icon(
+                            FluentIcons.camera_24_regular,
+                            color: Colors.grey,
+                            size: 24,
+                          ),
+                          title: const Text(
+                            'Pendaftaran Wajah',
+                            style: TextStyle(
+                              color: Colors.black87,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              fontFamily: 'Poppins',
+                            ),
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: _registerFace,
+                        ),
+                        const Divider(height: 1),
+                      ],
+                    ),
+                  ),
                   ListTile(
                     leading: const Icon(
                       FluentIcons.settings_24_regular,

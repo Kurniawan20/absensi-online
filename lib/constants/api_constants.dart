@@ -18,6 +18,16 @@ class ApiConstants {
   // Profile endpoints
   static const String profile = '$baseUrl/profile';
 
+  // Base URL Python Face Service
+  // PENTING: ganti dengan IP/domain publik server yang bisa diakses HP
+  // Contoh: "http://abs.basitd.net:5001"
+  static const String faceServiceUrl =
+      'https://9676-2001-448a-81b0-e94-3d6c-7668-cde5-3bd4.ngrok-free.app';
+
+  // Face Recognition endpoints (langsung ke Python microservice)
+  static const String faceRegister = '$faceServiceUrl/register';
+  static const String faceVerify = '$faceServiceUrl/verify';
+
   // Attendance endpoints
   static const String attendanceCheckIn = '$baseUrl/absenmasuk';
   static const String attendanceCheckOut = '$baseUrl/absenpulang';

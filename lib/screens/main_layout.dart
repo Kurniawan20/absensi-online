@@ -59,7 +59,8 @@ class _MainLayoutState extends State<MainLayout>
   }
 
   void _setupNotificationRefreshListener() {
-    _notificationRefreshSubscription = NotificationRefreshService().onRefresh.listen((_) {
+    _notificationRefreshSubscription =
+        NotificationRefreshService().onRefresh.listen((_) {
       print('MainLayout: Received notification refresh event');
       _refreshNotifications();
     });
@@ -68,7 +69,9 @@ class _MainLayoutState extends State<MainLayout>
   Future<void> _refreshNotifications() async {
     if (_currentNpp != null && mounted) {
       print('MainLayout: Refreshing notifications for $_currentNpp');
-      context.read<NotificationBloc>().add(RefreshNotifications(npp: _currentNpp!));
+      context
+          .read<NotificationBloc>()
+          .add(RefreshNotifications(npp: _currentNpp!));
     }
   }
 
@@ -103,10 +106,10 @@ class _MainLayoutState extends State<MainLayout>
       if (mounted) {
         // Register FCM token
         context.read<NotificationBloc>().add(RegisterFcmToken(
-          npp: npp,
-          fcmToken: fcmToken,
-          deviceId: deviceId,
-        ));
+              npp: npp,
+              fcmToken: fcmToken,
+              deviceId: deviceId,
+            ));
         print('FCM token registration event dispatched');
 
         // Load notifications to show badge

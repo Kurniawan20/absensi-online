@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/blog_post.dart';
 import '../repository/home_repository.dart';
 import '../constants/api_constants.dart';
+import '../widgets/skeleton_text.dart';
 
 class BlogDetailPage extends StatefulWidget {
   final int blogId;
@@ -290,47 +291,43 @@ class _BlogDetailPageState extends State<BlogDetailPage> {
     return Padding(
       padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 100),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start, // Align kiri agar skeleton terlihat rapi
         children: [
-          Container(
-            width: 100,
-            height: 28,
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(20),
+          const Align(
+            alignment: Alignment.center,
+            child: SkeletonText(
+              width: 100,
+              height: 28,
+              borderRadius: 20,
             ),
           ),
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Column(
-              children: [
-                Container(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                SkeletonText(
                   width: double.infinity,
                   height: 28,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+                  borderRadius: 4,
                 ),
-                const SizedBox(height: 8),
-                Container(
+                SizedBox(height: 8),
+                SkeletonText(
                   width: 200,
                   height: 28,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+                  borderRadius: 4,
                 ),
               ],
             ),
           ),
           const SizedBox(height: 24),
-          Container(
-            width: 180,
-            height: 16,
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(4),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24),
+            child: SkeletonText(
+              width: 180,
+              height: 16,
+              borderRadius: 4,
             ),
           ),
           const SizedBox(height: 32),
@@ -339,15 +336,12 @@ class _BlogDetailPageState extends State<BlogDetailPage> {
             child: Column(
               children: List.generate(
                 6,
-                (index) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Container(
+                (index) => const Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: SkeletonText(
                     width: double.infinity,
                     height: 16,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(4),
-                    ),
+                    borderRadius: 4,
                   ),
                 ),
               ),

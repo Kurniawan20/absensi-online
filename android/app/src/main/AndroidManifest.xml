@@ -13,6 +13,8 @@
     <!-- Hapus permission media dari dependency transitif - app tidak menggunakan foto/video -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove" />
+    <!-- Permission untuk fitur pengenalan wajah -->
+    <uses-permission android:name="android.permission.CAMERA" />
 
 <!--    <uses-permission android:name="android.permission.WAKE_LOCK"/>-->
 

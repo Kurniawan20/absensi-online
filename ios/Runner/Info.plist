@@ -55,6 +55,8 @@
 	<string>Aplikasi memerlukan akses lokasi untuk verifikasi kehadiran Anda di area kantor</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Aplikasi memerlukan akses lokasi untuk verifikasi kehadiran Anda di area kantor</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Aplikasi memerlukan akses kamera untuk verifikasi wajah saat absensi</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

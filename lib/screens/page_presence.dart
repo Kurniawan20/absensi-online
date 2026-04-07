@@ -19,6 +19,7 @@ import '../utils/storage_config.dart';
 import '../constants/office_location_config.dart' hide OfficeLocation;
 import '../constants/attendance_response_codes.dart';
 import '../models/office_location.dart';
+import './camera_capture_screen.dart';
 
 void main() => runApp(const Presence());
 
@@ -69,36 +70,76 @@ class _PresenceState extends State<Presence> {
   final _attendanceService = AttendanceService();
   final _securityService = SecurityService();
 
+  bool _hasLastPositionChecked = false;
+
   @override
   void initState() {
     super.initState();
     initializeDateFormatting('id', null);
 
-    _timer = Timer.periodic(Duration(seconds: 1), (timer) => _updateTime());
-    initializePreference().then((result) {
-      if (!mounted) return;
-      setState(() {});
+    // Mulai timer jam
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) => _updateTime());
+    _updateTime(); // Langsung tampilkan jam sekarang tanpa menunggu 1 detik
+
+    // Cek last known location secepatnya, lalu set flag = true
+    _initWithLastKnownPosition().then((_) {
+      if (mounted) {
+        setState(() {
+          _hasLastPositionChecked = true;
+        });
+      }
     });
 
-    getUserCurrentLocation().then((currLocation) {
-      if (!mounted) return;
-      setState(() {
-        currentLatLng = LatLng(currLocation.latitude, currLocation.longitude);
-        if (_controller.isCompleted) {
-          _controller.future.then((controller) {
-            if (!mounted) return;
-            controller.animateCamera(
-              CameraUpdate.newCameraPosition(
-                CameraPosition(target: currentLatLng, zoom: zoomVar),
-              ),
-            );
-          });
-        }
-      });
+    // Jalankan semua init secara paralel agar tidak saling menunggu
+    Future.wait([
+      initializePreference(),
+      _loadAttendanceData(),
+    ]).then((_) {
+      // Setelah preference loaded, baru update lokasi GPS akurat di background
+      _updateLocationInBackground();
     });
 
-    _loadAttendanceData();
     _performSecurityCheck();
+  }
+
+  /// Gunakan lokasi terakhir yang diketahui (cached) untuk render peta instan
+  Future<void> _initWithLastKnownPosition() async {
+    try {
+      final lastPosition = await Geolocator.getLastKnownPosition();
+      if (lastPosition != null && mounted) {
+        setState(() {
+          currentLatLng = LatLng(lastPosition.latitude, lastPosition.longitude);
+        });
+      }
+    } catch (_) {
+      // Tetap gunakan default location jika tidak ada cached position
+    }
+  }
+
+  /// Update lokasi ke posisi akurat di background setelah peta sudah tampil
+  Future<void> _updateLocationInBackground() async {
+    try {
+      final currLocation = await getUserCurrentLocation();
+      if (!mounted) return;
+
+      final newLatLng = LatLng(currLocation.latitude, currLocation.longitude);
+      setState(() {
+        currentLatLng = newLatLng;
+      });
+
+      // Animasikan kamera ke posisi akurat jika map sudah siap
+      if (_controller.isCompleted) {
+        final controller = await _controller.future;
+        if (!mounted) return;
+        controller.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(target: newLatLng, zoom: zoomVar),
+          ),
+        );
+      }
+    } catch (_) {
+      // Lokasi tidak tersedia, peta tetap di posisi default
+    }
   }
 
   Future<void> initializePreference() async {
@@ -271,6 +312,39 @@ class _PresenceState extends State<Presence> {
       }
 
       if (isWithinRadius) {
+        // Tutup dialog loading
+        Navigator.of(context, rootNavigator: true).pop();
+
+        // [HIDDEN] Kamera Wajah Dinonaktifkan Sementara
+        // Untuk mengaktifkan kembali, beri komentar pada blok 'Langsung Absen'
+        // dan hapus komentar pada blok 'Kamera' di bawah ini.
+
+        // --- BLOK KAMERA (DINONAKTIFKAN) ---
+        // final base64Image = await Navigator.push(
+        //   context,
+        //   MaterialPageRoute(builder: (context) => const CameraCaptureScreen()),
+        // );
+        // if (base64Image != null && base64Image is String) {
+        //   showDialog(
+        //     context: context,
+        //     barrierDismissible: false,
+        //     builder: (context) => CustomLoadingAlert(
+        //       message: type == 'absenmasuk' ? 'Memproses Absen Masuk' : 'Memproses Absen Pulang',
+        //     ),
+        //   );
+        //   _absen(position.latitude, position.longitude, type, base64Image);
+        // }
+
+        // --- BLOK LANGSUNG ABSEN (AKTIF - SEPERTI BIASA) ---
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => CustomLoadingAlert(
+            message: type == 'absenmasuk'
+                ? 'Memproses Absen Masuk'
+                : 'Memproses Absen Pulang',
+          ),
+        );
         _absen(position.latitude, position.longitude, type);
       } else {
         Navigator.of(context, rootNavigator: true).pop();
@@ -503,7 +577,63 @@ class _PresenceState extends State<Presence> {
     );
   }
 
-  Future<String> _absen(double lat, double long, String absenType) async {
+  /// Memverifikasi wajah ke Python face service sebelum melakukan absensi.
+  /// Mengembalikan `null` jika wajah terverifikasi (sukses), 
+  /// atau pesan error `String` jika gagal.
+  Future<String?> _verifyFace(String base64Image) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final npp = prefs.getString('npp');
+
+      if (npp == null) {
+        return 'NPP tidak ditemukan.';
+      }
+
+      print('=== [Face Verify] Request ===');
+      print('URL  : ${ApiConstants.faceVerify}');
+      print('NPP  : $npp');
+      print('Image: [base64 ${base64Image.length} chars]');
+
+      final response = await http
+          .post(
+            Uri.parse(ApiConstants.faceVerify),
+            headers: {'Content-Type': 'application/json; charset=UTF-8'},
+            body: jsonEncode(<String, dynamic>{
+              'user_id': npp,
+              'image': base64Image,
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      print('=== [Face Verify] Response ===');
+      print('Status : ${response.statusCode}');
+      print('Body   : ${response.body}');
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+      // Cek liveness check gagal (foto blur/gelap/terlalu terang)
+      if (data['liveness_failed'] == true) {
+        return data['message'] ?? 'Gunakan wajah asli, bukan foto.';
+      }
+
+      // Cek apakah wajah sudah terdaftar
+      if (data['success'] == false) {
+        return data['message'] ?? 'Daftarkan wajah Anda terlebih dahulu di menu Profil.';
+      }
+
+      // Cek apakah wajah cocok dengan data master
+      if (data['verified'] != true) {
+        final similarity = data['similarity']?.toStringAsFixed(1) ?? '-';
+        return 'Wajah tidak dikenali (kecocokan: $similarity%). Pastikan pencahayaan cukup dan wajah terlihat jelas.';
+      }
+
+      return null; // Sukses, tidak ada error
+    } catch (e) {
+      return 'Tidak dapat menghubungi layanan verifikasi wajah. Periksa koneksi internet.';
+    }
+  }
+
+  Future<String> _absen(double lat, double long, String absenType, [String? base64Image]) async {
     final prefs = await SharedPreferences.getInstance();
     final branchId = prefs.getString("kode_kantor").toString();
     final nrk = prefs.getString("npp");
@@ -584,11 +714,12 @@ class _PresenceState extends State<Presence> {
                 'Content-Type': 'application/json; charset=UTF-8',
                 'Authorization': 'Bearer $token',
               },
-              body: jsonEncode(<String, String>{
+              body: jsonEncode(<String, dynamic>{
                 'npp': nrk.toString(),
                 'latitude': lat.toString(),
                 'longitude': long.toString(),
                 'branch_id': branchId,
+                if (base64Image != null) 'image': base64Image,
               }),
             )
             .timeout(const Duration(seconds: 20));
@@ -953,49 +1084,57 @@ class _PresenceState extends State<Presence> {
             bottom: MediaQuery.of(context).size.height * 0.48,
             child: Stack(
               children: [
-                GoogleMap(
-                  mapType: MapType.normal,
-                  initialCameraPosition: CameraPosition(
-                    target: currentLatLng,
-                    zoom: zoomVar,
-                  ),
-                  zoomControlsEnabled: false,
-                  myLocationButtonEnabled: false,
-                  myLocationEnabled: true,
-                  onMapCreated: (GoogleMapController controller) {
-                    _controller.complete(controller);
-                  },
-                  circles: Set.from(
-                    officeLocations.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final location = entry.value;
-                      return Circle(
-                        circleId: CircleId('office_$index'),
-                        center: LatLng(location.latitude, location.longitude),
-                        radius: location.radius,
-                        fillColor: Color.fromRGBO(1, 101, 65, 0.2),
-                        strokeColor: Color.fromRGBO(1, 101, 65, 0.5),
-                        strokeWidth: 2,
-                      );
-                    }).toList(),
-                  ),
-                  markers: Set.from(
-                    officeLocations.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final location = entry.value;
-                      return Marker(
-                        markerId: MarkerId('office_marker_$index'),
-                        position: LatLng(location.latitude, location.longitude),
-                        infoWindow: InfoWindow(
-                          title: location.nama,
-                          snippet:
-                              '${location.alamat}\nRadius: ${location.radius.toStringAsFixed(0)}m',
+                _hasLastPositionChecked
+                    ? GoogleMap(
+                        mapType: MapType.normal,
+                        initialCameraPosition: CameraPosition(
+                          target: currentLatLng,
+                          zoom: zoomVar,
                         ),
-                        icon: BitmapDescriptor.defaultMarkerWithHue(120.0),
-                      );
-                    }).toList(),
-                  ),
-                ),
+                        zoomControlsEnabled: false,
+                        myLocationButtonEnabled: false,
+                        myLocationEnabled: true,
+                        onMapCreated: (GoogleMapController controller) {
+                          _controller.complete(controller);
+                        },
+                        circles: Set.from(
+                          officeLocations.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final location = entry.value;
+                            return Circle(
+                              circleId: CircleId('office_$index'),
+                              center: LatLng(
+                                  location.latitude, location.longitude),
+                              radius: location.radius,
+                              fillColor: Color.fromRGBO(1, 101, 65, 0.2),
+                              strokeColor: Color.fromRGBO(1, 101, 65, 0.5),
+                              strokeWidth: 2,
+                            );
+                          }).toList(),
+                        ),
+                        markers: Set.from(
+                          officeLocations.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final location = entry.value;
+                            return Marker(
+                              markerId: MarkerId('office_marker_$index'),
+                              position: LatLng(
+                                  location.latitude, location.longitude),
+                              infoWindow: InfoWindow(
+                                title: location.nama,
+                                snippet:
+                                    '${location.alamat}\nRadius: ${location.radius.toStringAsFixed(0)}m',
+                              ),
+                              icon: BitmapDescriptor.defaultMarkerWithHue(120.0),
+                            );
+                          }).toList(),
+                        ),
+                      )
+                    : const Center(
+                        child: CircularProgressIndicator(
+                          color: Color.fromRGBO(1, 101, 65, 1),
+                        ),
+                      ),
 
                 // Location status badge
                 Positioned(

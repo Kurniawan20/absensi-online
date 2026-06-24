@@ -1,11 +1,8 @@
 class ApiConstants {
   // Base URL untuk API endpoints
-  static const String baseUrl =
-      "https://abs.basitd.net/api-absensi-mobile-v3/public/api";
+  static const String baseUrl = "https://abs.basitd.net/api";
   // static const String baseUrl = "http://192.168.100.182/api";
   // static const String baseUrl = "http://10.0.2.2:8081/api";
-  // static const String baseUrl =
-  //     "https://c6dd-180-247-78-220.ngrok-free.app/api";
 
   // App Version endpoints
   static const String appVersionCheck = '$baseUrl/app-version/check';
